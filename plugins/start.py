@@ -174,3 +174,30 @@ def my_plan_callback(call):
             expiry = datetime.fromtimestamp(s['expiry']).strftime('%d %b %Y')
             res += f"📺 <b>{name}</b>\n⌛ Valid: <code>{expiry}</code>\n────────────────────\n"
         bot.send_message(u_id, res, parse_mode="HTML")
+
+
+@bot.message_handler(commands=['delete'])
+def delete_item_handler(message):
+    # Sirf Admin hi delete kar sake
+    if message.from_user.id != config.ADMIN_ID:
+        return bot.reply_to(message, "❌ Aapke paas iska access nahi hai.")
+
+    text = message.text.split()
+    if len(text) < 2:
+        return bot.reply_to(message, "💡 <b>Usage:</b> <code>/delete ID</code>\n\n(ID aapko Manage All ya Store link mein mil jayegi)")
+
+    target_id = text[1]
+
+    # Database se delete karne ki koshish (item_id ya channel_id dono check karega)
+    result = channels_col.delete_one({
+        "$or": [
+            {"item_id": target_id},
+            {"channel_id": int(target_id) if target_id.replace('-', '').isdigit() else 0}
+        ]
+    })
+
+    if result.deleted_count > 0:
+        bot.reply_to(message, f"✅ <b>Success:</b> Item <code>{target_id}</code> database se hata diya gaya hai.")
+    else:
+        bot.reply_to(message, f"❌ <b>Error:</b> Database mein <code>{target_id}</code> naam ki koi ID nahi mili.")
+        
