@@ -7,32 +7,52 @@ import time
 
 # --- 1. PAYMENT SELECTION ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('select_'))
-def confirm_step(call):
-    parts = call.data.split('_')
-    item_id, mins = parts[1], parts[2]
-    
-    data = channels_col.find_one({"item_id": item_id}) or \
-           channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
-    
-    if not data: return bot.answer_callback_query(call.id, "❌ Data not found!")
+def handle_selection(call):
+    # Callback data format: select_{item_id}_{mins}
+    try:
+        parts = call.data.split('_')
+        if len(parts) < 3:
+            return bot.answer_callback_query(call.id, "❌ Invalid Callback Data!")
 
-    price = data['price'] if 'story_name' in data else data['plans'].get(mins, "0")
-    display_name = data.get('story_name') or data.get('name')
-    
-    markup = InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        InlineKeyboardButton("💳 ᴘᴀʏ ᴠɪᴀ ǫʀ sᴄᴀɴ", callback_data=f"man_{item_id}_{mins}_qr"),
-        InlineKeyboardButton("📲 ᴘᴀʏ ᴠɪᴀ ᴜᴘɪ ɪᴅ", callback_data=f"man_{item_id}_{mins}_upi")
-    )
-    
-    text = (
-        f"<b>🛒 ᴄᴏɴғɪʀᴍ sᴇʟᴇᴄᴛɪᴏɴ</b>\n"
-        f"────────────────────\n"
-        f"📦 ɪᴛᴇᴍ: <b>{display_name}</b>\n"
-        f"💰 ᴀᴍᴏᴜɴᴛ: <b>₹{price}</b>\n\n"
-        f"➔ Payment method select karein:"
-    )
-    bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+        item_id = parts[1]
+        mins = parts[2]
+        
+        bot.answer_callback_query(call.id, "⏳ Payment details load ho rahi hain...")
+
+        # Database se item nikalna
+        data = channels_col.find_one({"item_id": item_id}) or \
+               channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
+        
+        if not data:
+            return bot.send_message(call.message.chat.id, "❌ Data nahi mila, database check karein.")
+
+        # Price calculate karna
+        price = data['price'] if 'story_name' in data else data['plans'].get(mins, "0")
+        display_name = data.get('story_name') or data.get('name')
+        
+        markup = InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            InlineKeyboardButton("💳 ᴘᴀʏ ᴠɪᴀ ǫʀ sᴄᴀɴ", callback_data=f"man_{item_id}_{mins}_qr"),
+            InlineKeyboardButton("📲 ᴘᴀʏ ᴠɪᴀ ᴜᴘɪ ɪᴅ", callback_data=f"man_{item_id}_{mins}_upi"),
+            InlineKeyboardButton("⬅️ ʙᴀᴄᴋ", callback_data=f"view_card_{item_id}")
+        )
+        
+        text = (
+            f"<b>🛒 ᴄᴏɴғɪʀᴍ sᴇʟᴇᴄᴛɪᴏɴ</b>\n"
+            f"────────────────────\n"
+            f"📦 ɪᴛᴇᴍ: <b>{display_name}</b>\n"
+            f"💰 ᴀᴍᴏᴜɴᴛ: <b>₹{price}</b>\n\n"
+            f"➔ Payment method select karein:"
+        )
+        
+        # Video mein aap photo card par click kar rahe ho, 
+        # isliye message edit ki jagah delete-send zyada smooth rahega
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        bot.send_message(call.message.chat.id, text, reply_markup=markup, parse_mode="HTML")
+
+    except Exception as e:
+        print(f"Error in select_: {e}")
+        bot.answer_callback_query(call.id, "❌ Kuch galti hui hai!")
 
 # --- 2. MANUAL PAYMENT (QR & UPI) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('man_'))
