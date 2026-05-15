@@ -1,8 +1,10 @@
+import uuid
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils import bot
 from database import channels_col, users_col
 import config
 
+# --- 1. REMOVE USER (SECURE) ---
 @bot.message_handler(commands=['remove'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def remove_user_start(message):
     msg = bot.send_message(config.ADMIN_ID, "👤 <b>User ko remove karein:</b>\n\nUs user ki <b>ID</b> bhejein jiska access aap khatam karna chahte hain (ya /cancel):", parse_mode="HTML")
@@ -16,7 +18,7 @@ def process_remove_user(message):
         u_id = int(message.text)
         result = users_col.delete_many({"user_id": u_id})
         if result.deleted_count > 0:
-            bot.send_message(config.ADMIN_ID, f"✅ <b>Success!</b>\nUser <code>{u_id}</code> ke saare plans hata diye gaye hain.", parse_mode="HTML")
+            bot.send_message(config.ADMIN_ID, f"✅ <b>Success!</b>\nUser <code>{u_id}</code> ke saare access hata diye gaye hain.", parse_mode="HTML")
             try: bot.send_message(u_id, "⚠️ <b>Access Revoked:</b> Aapka subscription admin dwara khatam kar diya gaya hai.", parse_mode="HTML")
             except: pass
         else:
@@ -24,40 +26,87 @@ def process_remove_user(message):
     except ValueError:
         bot.send_message(config.ADMIN_ID, "❌ Invalid ID! Sirf numbers bhejein.")
 
+# --- 2. MANAGE CHANNELS & STORIES (LINK FIX) ---
 @bot.message_handler(commands=['channels'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def list_channels(message):
-    cursor = channels_col.find({"admin_id": config.ADMIN_ID})
+    cursor = channels_col.find() # Admin check agar database mein hai to add karein
     markup = InlineKeyboardMarkup()
     for ch in cursor:
-        markup.add(InlineKeyboardButton(f"📺 {ch['name']}", callback_data=f"manage_{ch['channel_id']}"))
-    bot.send_message(config.ADMIN_ID, "📑 <b>Managed Channels:</b>", reply_markup=markup, parse_mode="HTML")
+        name = ch.get('story_name') or ch.get('name')
+        markup.add(InlineKeyboardButton(f"⚙️ Manage: {name}", callback_data=f"manage_{ch['item_id']}"))
+    
+    if markup.keyboard:
+        bot.send_message(config.ADMIN_ID, "📑 <b>ʏᴏᴜʀ ᴀʟʟ ɪᴛᴇᴍs:</b>\nNiche kisi bhi item ko manage karne ke liye click karein:", reply_markup=markup, parse_mode="HTML")
+    else:
+        bot.send_message(config.ADMIN_ID, "❌ Abhi koi channel ya story add nahi hai.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('manage_'))
 def manage_ch(call):
-    ch_id = int(call.data.split('_')[1])
-    ch_data = channels_col.find_one({"channel_id": ch_id})
-    link = f"https://t.me/{bot.get_me().username}?start={ch_id}"
-    text = (f"⚙️ <b>Settings:</b> {ch_data['name']}\n\n🔗 <b>Invite Link:</b> <code>{link}</code>\n📺 <b>Demo:</b> {ch_data.get('demo_link', 'None')}\n💰 <b>Plans:</b> {ch_data['plans']}")
+    item_id = call.data.split('_')[1]
+    ch_data = channels_col.find_one({"item_id": item_id})
+    
+    if not ch_data:
+        return bot.answer_callback_query(call.id, "Data not found!")
+
+    bot_user = bot.get_me().username
+    link = f"https://t.me/{bot_user}?start={item_id}"
+    
+    name = ch_data.get('story_name') or ch_data.get('name')
+    price_info = f"₹{ch_data['price']}" if 'story_name' in ch_data else ch_data['plans']
+    
+    text = (
+        f"⚙️ <b>sᴇᴛᴛɪɴɢs:</b> {name}\n"
+        f"────────────────────\n"
+        f"🔗 <b>sʜᴀʀᴇ ʟɪɴᴋ:</b>\n<code>{link}</code>\n\n"
+        f"📺 <b>ᴅᴇᴍᴏ:</b> {ch_data.get('demo_link', 'None')}\n"
+        f"💰 <b>ᴘʟᴀɴs:</b> {price_info}\n"
+        f"────────────────────\n"
+        f"➔ Is link ko copy karke aap promote kar sakte hain."
+    )
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="HTML")
 
+# --- 3. ADD CHANNEL (WITH ITEM_ID GENERATION) ---
 @bot.message_handler(commands=['add'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def add_start(message):
-    msg = bot.send_message(config.ADMIN_ID, "Forward a message from the channel.")
+    msg = bot.send_message(config.ADMIN_ID, "📢 <b>ᴀᴅᴅ ᴄʜᴀɴɴᴇʟ:</b>\nChannel se koi bhi ek message <b>Forward</b> karein:")
     bot.register_next_step_handler(msg, get_plans)
 
 def get_plans(message):
     if message.forward_from_chat:
-        ch_id, ch_name = message.forward_from_chat.id, message.forward_from_chat.title
-        msg = bot.send_message(config.ADMIN_ID, f"✅ {ch_name}\nEnter Plans: <code>Min:Price, Min:Price</code>", parse_mode="HTML")
+        ch_id = message.forward_from_chat.id
+        ch_name = message.forward_from_chat.title
+        msg = bot.send_message(config.ADMIN_ID, f"✅ <b>Found:</b> {ch_name}\n\nAb Plans enter karein (Format - Min:Price):\nExample: <code>1440:30, 10080:150</code>", parse_mode="HTML")
         bot.register_next_step_handler(msg, get_demo, ch_id, ch_name)
+    else:
+        bot.send_message(config.ADMIN_ID, "❌ Message forward nahi kiya gaya. Dubara /add try karein.")
 
 def get_demo(message, ch_id, ch_name):
-    plans = {p.split(':')[0].strip(): p.split(':')[1].strip() for p in message.text.split(',')}
-    msg = bot.send_message(config.ADMIN_ID, "Enter Demo Link (or 'none')")
-    bot.register_next_step_handler(msg, finalize, ch_id, ch_name, plans)
+    try:
+        plans = {p.split(':')[0].strip(): p.split(':')[1].strip() for p in message.text.split(',')}
+        msg = bot.send_message(config.ADMIN_ID, "🔗 Demo Link bhejein (Ya 'none' likhein):")
+        bot.register_next_step_handler(msg, finalize_channel, ch_id, ch_name, plans)
+    except:
+        msg = bot.send_message(config.ADMIN_ID, "❌ Format galat hai! Dubara likhein (Min:Price):")
+        bot.register_next_step_handler(msg, get_demo, ch_id, ch_name)
 
-def finalize(message, ch_id, ch_name, plans):
+def finalize_channel(message, ch_id, ch_name, plans):
     demo = None if message.text.lower() == 'none' else message.text
-    channels_col.update_one({"channel_id": ch_id}, {"$set": {"name": ch_name, "plans": plans, "demo_link": demo, "admin_id": config.ADMIN_ID}}, upsert=True)
-    bot.send_message(config.ADMIN_ID, "✅ Setup Finished!", parse_mode="HTML")
-
+    # Yahan generate hoga unique item_id purane channels ke liye bhi
+    item_id = str(uuid.uuid4())[:10]
+    
+    channels_col.update_one(
+        {"channel_id": ch_id}, 
+        {"$set": {
+            "item_id": item_id,
+            "name": ch_name, 
+            "plans": plans, 
+            "demo_link": demo, 
+            "type": "channel"
+        }}, 
+        upsert=True
+    )
+    
+    bot_user = bot.get_me().username
+    final_link = f"https://t.me/{bot_user}?start={item_id}"
+    
+    bot.send_message(config.ADMIN_ID, f"✅ <b>sᴇᴛᴜᴘ ғɪɴɪsʜᴇᴅ!</b>\n\nChannel: {ch_name}\nLink: <code>{final_link}</code>", parse_mode="HTML")
