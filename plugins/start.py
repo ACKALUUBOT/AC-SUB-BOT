@@ -9,28 +9,41 @@ def start_handler(message):
     user_id = message.from_user.id
     text = message.text.split()
 
-    # ─── 1. DEEP LINK ENTRY (FOR BUYERS) ───
+    # ─── 1. DEEP LINK ENTRY (STORY & CHANNEL) ───
     if len(text) > 1:
         try:
-            ch_id = int(text[1])
-            ch_data = channels_col.find_one({"channel_id": ch_id})
-            if ch_data:
-                markup = InlineKeyboardMarkup()
-                for p_time, p_price in ch_data['plans'].items():
-                    markup.add(InlineKeyboardButton(f"💳 {get_time_string(p_time)} - ₹{p_price}", callback_data=f"select_{ch_id}_{p_time}"))
-                if ch_data.get('demo_link'):
-                    markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ", url=ch_data['demo_link']))
+            item_id = text[1]
+            # Pehle check karte hain ki ye Story hai ya Channel
+            data = channels_col.find_one({"item_id": item_id}) or channels_col.find_one({"channel_id": int(item_id) if item_id.isdigit() else 0})
+            
+            if data:
+                markup = InlineKeyboardMarkup(row_width=1)
+                
+                # Agar Story hai (Aapka naya vision)
+                if 'story_name' in data:
+                    markup.add(InlineKeyboardButton(f"💳 ʙᴜʏ ɴᴏᴡ - ₹{data['price']}", callback_data=f"select_{item_id}_manual"))
+                    display_name = data['story_name']
+                    header = "🎬 <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ</b>"
+                # Agar purana Channel system hai
+                else:
+                    for p_time, p_price in data['plans'].items():
+                        markup.add(InlineKeyboardButton(f"💳 {get_time_string(p_time)} - ₹{p_price}", callback_data=f"select_{item_id}_{p_time}"))
+                    display_name = data['name']
+                    header = "💎 <b>ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇss</b>"
+
+                if data.get('demo_link'):
+                    markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ", url=data['demo_link']))
                 
                 premium_text = (
-                    f"╔════════════════════════╗\n"
-                    f"       💎 <b>ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇss</b>\n"
-                    f"╚════════════════════════╝\n\n"
-                    f"📺 <b>ᴄʜᴀɴɴᴇʟ:</b> {ch_data['name']}\n"
-                    f"➔ Please niche diye gaye active plans mein se ek select karein:"
+                    f"{header}\n"
+                    f"────────────────────\n"
+                    f"📦 ɴᴀᴍᴇ: <b>{display_name}</b>\n\n"
+                    f"➔ Please niche diye gaye plans mein se ek select karein:"
                 )
                 bot.send_message(message.chat.id, premium_text, reply_markup=markup, parse_mode="HTML")
                 return
-        except: 
+        except Exception as e:
+            print(f"Start Error: {e}")
             pass
 
     # ─── 2. MERGED MASTER MENU (ADMIN + USER) ───
@@ -41,101 +54,74 @@ def start_handler(message):
     btn_support = InlineKeyboardButton("📞 sᴜᴘᴘᴏʀᴛ", url=f"https://t.me/{config.CONTACT_USERNAME}")
     markup.add(btn_dashboard, btn_support)
 
-    # Admin Special Buttons (Sirf Admin ko dikhenge)
+    # Admin Special Buttons
     if user_id == config.ADMIN_ID:
         markup.add(
-            InlineKeyboardButton("➕ ᴀᴅᴅ ᴄʜᴀɴɴᴇʟ", callback_data="admin_add"),
-            InlineKeyboardButton("⚙️ ᴍᴀɴᴀɢᴇ ᴄʜᴀɴɴᴇʟs", callback_data="admin_channels")
+            InlineKeyboardButton("➕ ᴀᴅᴅ sᴛᴏʀʏ", callback_data="admin_story"),
+            InlineKeyboardButton("⚙️ ᴍᴀɴᴀɢᴇ ᴀʟʟ", callback_data="admin_channels")
         )
-        markup.add(InlineKeyboardButton("❌ ʀᴇᴍᴏᴠᴇ sᴜʙsᴄʀɪᴘᴛɪᴏɴ", callback_data="admin_remove"))
+        markup.add(InlineKeyboardButton("❌ ʀᴇᴍᴏᴠᴇ sᴜʙ", callback_data="admin_remove"))
 
-    # Custom Text Logic
     if user_id == config.ADMIN_ID:
         title = "⚡ <b>ᴀᴅᴍɪɴ ᴍᴀsᴛᴇʀ ᴘᴀɴᴇʟ</b>"
-        desc = "Welcome Back, Boss! Aapka personal dashboard aur administrative controls niche diye gaye hain."
+        desc = "Welcome Back, Boss! Niche diye gaye controls se stories aur channels manage karein."
     else:
         title = "👋 <b>ᴡᴇʟᴄᴏᴍᴇ ᴍᴇᴍʙᴇʀ</b>"
-        desc = "Main aapki premium subscriptions ko manage karta hoon. Dashboard check karne ke liye niche click karein."
+        desc = "Premium access aur plans ke liye dashboard check karein."
 
     final_text = (
-        f"┏───────────────────┓\n"
-        f"     {title}\n"
-        f"┗───────────────────┛\n\n"
-        f"👤 <b>ʜᴇʟʟᴏ,</b> {message.from_user.first_name}!\n\n"
+        f"{title}\n"
+        f"────────────────────\n"
+        f"👤 ʜᴇʟʟᴏ, <b>{message.from_user.first_name}</b>!\n\n"
         f"➔ {desc}"
     )
-    
     bot.send_message(message.chat.id, final_text, reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 3. ADMIN BUTTONS BRIDGE (CRASH-FREE) ───
+# ─── 3. ADMIN BUTTONS BRIDGE ───
 @bot.callback_query_handler(func=lambda call: call.data.startswith('admin_'))
 def admin_button_bridge(call):
     if call.from_user.id != config.ADMIN_ID:
-        bot.answer_callback_query(call.id, "Unauthorized Access!", show_alert=True)
-        return
+        return bot.answer_callback_query(call.id, "Unauthorized!", show_alert=True)
         
     action = call.data.split('_')[1]
     
-    try:
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-    except:
-        pass
-    
-    if action == "add":
-        bot.send_message(call.message.chat.id, "➕ <b>ᴀᴅᴅ ᴄʜᴀɴɴᴇʟ ᴍᴏᴅᴇ:</b>\nNaya channel add karne ke liye type karein: <code>/add</code>", parse_mode="HTML")
+    if action == "story":
+        bot.send_message(call.message.chat.id, "🎬 <b>sᴛᴏʀʏ ᴍᴏᴅᴇ:</b>\nNayi story add karne ke liye type karein: <code>/add_story</code>", parse_mode="HTML")
     elif action == "channels":
-        bot.send_message(call.message.chat.id, "⚙️ <b>ᴍᴀɴᴀɢᴇᴍᴇɴᴛ ᴍᴏᴅᴇ:</b>\nChannels manage karne ke liye type karein: <code>/channels</code>", parse_mode="HTML")
+        bot.send_message(call.message.chat.id, "⚙️ <b>ᴍᴀɴᴀɢᴇᴍᴇɴᴛ:</b>\nChannels ke liye <code>/channels</code> type karein.", parse_mode="HTML")
     elif action == "remove":
-        bot.send_message(call.message.chat.id, "❌ <b>ʀᴇᴍᴏᴠᴇ ᴍᴏᴅᴇ:</b>\nUser ko kick karne ke liye type karein: <code>/remove</code>", parse_mode="HTML")
-
-
-# ─── 4. MASTER DASHBOARD (ADMIN LIST + USER PLAN) ───
-@bot.message_handler(commands=['myplan'])
-@bot.callback_query_handler(func=lambda call: call.data == "my_plan")
-def my_plan(message):
-    u_id = message.from_user.id if hasattr(message, 'from_user') else message.message.chat.id
+        bot.send_message(call.message.chat.id, "❌ <b>ʀᴇᴍᴏᴠᴇ:</b>\nSubscription hatane ke liye <code>/remove</code> use karein.", parse_mode="HTML")
     
-    # --- ADMIN VIEW: ALL USERS LIST ---
+    bot.answer_callback_query(call.id)
+
+
+# ─── 4. MASTER DASHBOARD ───
+@bot.callback_query_handler(func=lambda call: call.data == "my_plan")
+def my_plan_callback(call):
+    u_id = call.from_user.id
+    
     if u_id == config.ADMIN_ID:
         all_subs = list(users_col.find().sort("expiry", 1))
-        
         if not all_subs:
-            bot.send_message(u_id, "🧐 <b>ᴀᴅᴍɪɴ ʀᴇᴘᴏʀᴛ:</b> Abhi koi bhi active premium user nahi hai.", parse_mode="HTML")
-            return
+            return bot.send_message(u_id, "📋 Abhi koi active user nahi hai.")
 
-        report = "📋 <b>ᴀʟʟ ᴀᴄᴛɪᴠᴇ sᴜʙsᴄʀɪᴘᴛɪᴏɴs</b>\n"
-        report += "───────────────────\n\n"
-        
+        report = "📋 <b>ᴀʟʟ ᴀᴄᴛɪᴠᴇ sᴜʙs</b>\n────────────────────\n\n"
         for s in all_subs:
             ch = channels_col.find_one({"channel_id": s['channel_id']})
             ch_name = ch['name'] if ch else "Unknown"
-            expiry_dt = datetime.fromtimestamp(s['expiry'])
-            days_left = (expiry_dt - datetime.now()).days
-            
-            status_time = f"{days_left} Days" if days_left > 0 else "Expires Today"
-            
-            report += (
-                f"👤 <b>ᴜsᴇʀ:</b> <code>{s['user_id']}</code>\n"
-                f"📺 <b>ᴄʜ:</b> {ch_name}\n"
-                f"⏳ <b>ʟᴇғᴛ:</b> <code>{status_time}</code>\n"
-                f"📅 <b>ᴇxᴘ:</b> {expiry_dt.strftime('%d/%m/%y')}\n"
-                f"───────────────────\n"
-            )
+            days_left = (datetime.fromtimestamp(s['expiry']) - datetime.now()).days
+            report += f"👤 <code>{s['user_id']}</code> | 📺 {ch_name} | ⏳ {days_left} Days\n"
         bot.send_message(u_id, report, parse_mode="HTML")
-        return
+    else:
+        subs = list(users_col.find({"user_id": u_id}))
+        if not subs:
+            return bot.send_message(u_id, "❌ Aapka koi active plan nahi hai.")
 
-    # --- USER VIEW: OWN PLAN ---
-    subs = list(users_col.find({"user_id": u_id}))
-    if not subs:
-        bot.send_message(u_id, "❌ <b>Aapka koi active plan nahi hai.</b>", parse_mode="HTML")
-        return
-
-    res = "┏───────────────────┓\n     👤 <b>ᴜsᴇʀ sᴜʙsᴄʀɪᴘᴛɪᴏɴ</b>\n┗───────────────────┛\n\n"
-    for s in subs:
-        ch = channels_col.find_one({"channel_id": s['channel_id']})
-        name = ch['name'] if ch else "Unknown"
-        expiry = datetime.fromtimestamp(s['expiry']).strftime('%d %b %Y ➔ %I:%M %p')
-        res += f"📺 <b>{name}</b>\n⌛ Valid: <code>{expiry}</code>\n───────────────────\n"
-    
-    bot.send_message(u_id, res, parse_mode="HTML")
+        res = "👤 <b>ᴍʏ sᴜʙsᴄʀɪᴘᴛɪᴏɴs</b>\n────────────────────\n\n"
+        for s in subs:
+            ch = channels_col.find_one({"channel_id": s['channel_id']})
+            name = ch['name'] if ch else "Premium Item"
+            expiry = datetime.fromtimestamp(s['expiry']).strftime('%d %b %Y')
+            res += f"📺 <b>{name}</b>\n⌛ Valid: <code>{expiry}</code>\n────────────────────\n"
+        bot.send_message(u_id, res, parse_mode="HTML")
