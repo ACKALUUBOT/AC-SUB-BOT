@@ -26,20 +26,27 @@ def get_premium_store_markup():
             if 'story_name' in item:
                 # Case: Single Story
                 name = item['story_name']
-                price = f"₹{item['price']}"
+                price = f"₹{item.get('price', 'N/A')}"
                 icon = "🎬"
             else:
                 # Case: Forwarded Channel
                 name = item.get('name', 'Premium Access')
                 plans = item.get('plans', {})
-                price = f"Starts @ ₹{min(plans.values())}" if plans else "Check Plans"
+                # Safe Price Logic: Sirf numbers ka minimum nikalna
+                try:
+                    if plans:
+                        min_price = min(int(p) for p in plans.values())
+                        price = f"Starts @ ₹{min_price}"
+                    else:
+                        price = "View Plans"
+                except:
+                    price = "Check Plans"
                 icon = "💎"
 
             # Button Text
             btn_text = f"{icon} {name} — {price}"
             
-            # CALLBACK use karenge takni click karte hi Card View function trigger ho
-            # Ye 'view_card_' prefix wahi hai jo humne start.py mein handle kiya hai
+            # Callback trigger card view
             markup.add(types.InlineKeyboardButton(text=btn_text, callback_data=f"view_card_{db_id}"))
             
     markup.add(types.InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
@@ -50,7 +57,7 @@ def get_store_text():
         "✨ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ sᴛᴏʀᴇ</b> ✨\n"
         "────────────────────\n"
         "Niche hamari sabhi exclusive stories ki list hai.\n\n"
-        "➔ 🎬 = sɪɴɢʟᴇ sᴛᴏʀʏ\n"
-        "➔ 💎 = ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss\n\n"
+        "➔ 🎬 = 🎬 sɪɴɢʟᴇ sᴛᴏʀʏ\n"
+        "➔ 💎 = 💎 ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss\n\n"
         "<b>Note:</b> Kisi bhi item par click karke uski photo aur detail check karein."
     )
