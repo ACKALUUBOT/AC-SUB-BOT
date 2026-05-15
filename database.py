@@ -7,3 +7,4 @@ db = client['sub_management']
 channels_col = db['channels']
 users_col = db['users']
 
+utr_col = db['verified_utrs']
