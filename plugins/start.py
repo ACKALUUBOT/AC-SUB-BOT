@@ -4,20 +4,47 @@ from database import channels_col, users_col
 from datetime import datetime
 import config
 
-# ─── HELPER FUNCTION FOR STORE ───
+# ─── HELPER FUNCTION FOR STORE (Fixed for Manual & Forwarded) ───
 def get_store_markup():
-    # Database se sirf wo data nikalna jisme 'story_name' hai
-    all_stories = list(channels_col.find({"story_name": {"$exists": True}}))
+    # Database se Stories (story_name) aur Channels (name) dono fetch karein
+    all_items = list(channels_col.find({
+        "$or": [
+            {"story_name": {"$exists": True}},
+            {"name": {"$exists": True}}
+        ]
+    }))
+    
     markup = InlineKeyboardMarkup(row_width=1)
     
-    if not all_stories:
-        markup.add(InlineKeyboardButton("🚫 No Stories Available", callback_data="none"))
+    if not all_items:
+        markup.add(InlineKeyboardButton("🚫 No Items Available", callback_data="none"))
     else:
-        for story in all_stories:
-            # Button text: Story ka naam aur price
-            btn_text = f"📖 {story['story_name']} — ₹{story['price']}"
-            # Deep link: click karte hi payment panel khulega
-            url = f"https://t.me/{bot.get_me().username}?start={story['item_id']}"
+        for item in all_items:
+            # CASE 1: Agar Manual Story hai (Command wali)
+            if 'story_name' in item:
+                display_name = item['story_name']
+                price_tag = f"₹{item['price']}"
+                param = item.get('item_id')
+                icon = "🎬"
+
+            # CASE 2: Agar Forwarded Channel hai (Subscription wali)
+            else:
+                display_name = item.get('name', 'Premium Channel')
+                plans = item.get('plans', {})
+                if plans:
+                    # Sabse sasta plan nikalne ke liye
+                    min_price = min([int(p) for p in plans.values()])
+                    price_tag = f"Starts @ ₹{min_price}"
+                else:
+                    price_tag = "Check Plans"
+                param = item.get('channel_id')
+                icon = "💎"
+
+            # Button Text: [Icon] Name — Price
+            btn_text = f"{icon} {display_name} — {price_tag}"
+            
+            # Deep link URL logic
+            url = f"https://t.me/{bot.get_me().username}?start={param}"
             markup.add(InlineKeyboardButton(btn_text, url=url))
             
     markup.add(InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
@@ -31,6 +58,7 @@ def start_handler(message):
     # ─── 1. DEEP LINK ENTRY (STORY & CHANNEL) ───
     if len(text) > 1:
         param = text[1]
+        # Database check: item_id ya channel_id dono ke liye
         data = channels_col.find_one({"item_id": param}) or \
                channels_col.find_one({"channel_id": int(param) if param.replace('-','').isdigit() else 0})
 
@@ -38,20 +66,22 @@ def start_handler(message):
             markup = InlineKeyboardMarkup(row_width=1)
             db_id = data.get('item_id') or data.get('channel_id')
             
+            # STORY ACCESS
             if 'story_name' in data:
                 markup.add(InlineKeyboardButton(f"💳 ʙᴜʏ ɴᴏᴡ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
                 display_name = data['story_name']
                 header = "🎬 <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ</b>"
+            
+            # CHANNEL ACCESS
             else:
                 for p_time, p_price in data['plans'].items():
                     markup.add(InlineKeyboardButton(f"💳 {get_time_string(p_time)} - ₹{p_price}", callback_data=f"select_{db_id}_{p_time}"))
-                display_name = data['name']
+                display_name = data.get('name', 'Premium Access')
                 header = "💎 <b>ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇss</b>"
 
             if data.get('demo_link'):
                 markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ", url=data['demo_link']))
             
-            # Back to home button
             markup.add(InlineKeyboardButton("🏠 ʙᴀᴄᴋ ᴛᴏ ʜᴏᴍᴇ", callback_data="back_to_start"))
 
             premium_text = (
@@ -65,7 +95,6 @@ def start_handler(message):
     # ─── 2. MAIN DASHBOARD ───
     markup = InlineKeyboardMarkup(row_width=2)
     
-    # Store Button (Main highlight)
     markup.add(InlineKeyboardButton("✨ ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀᴇ (ᴄʜᴇᴄᴋ sᴛᴏʀɪᴇs) ✨", callback_data="open_store"))
     
     markup.add(
@@ -103,8 +132,10 @@ def open_store_callback(call):
     store_text = (
         "✨ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ sᴛᴏʀᴇ</b> ✨\n"
         "────────────────────\n"
-        "Niche hamari sabhi exclusive stories ki list hai.\n\n"
-        "➔ <b>Process:</b> Story select karein aur apna access payein."
+        "Niche hamari sabhi exclusive stories aur channels ki list hai.\n\n"
+        "➔ 🎬 = sɪɴɢʟᴇ sᴛᴏʀʏ\n"
+        "➔ 💎 = ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss\n\n"
+        "Select karke apna access activate karein."
     )
     bot.edit_message_text(store_text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
 
@@ -112,7 +143,6 @@ def open_store_callback(call):
 def back_to_start_callback(call):
     bot.answer_callback_query(call.id)
     bot.delete_message(call.message.chat.id, call.message.message_id)
-    # Restart the dashboard
     start_handler(call.message)
 
 @bot.callback_query_handler(func=lambda call: call.data == "my_plan")
