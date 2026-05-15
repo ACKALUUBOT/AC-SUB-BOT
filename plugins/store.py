@@ -3,50 +3,56 @@ from database import channels_col
 import config
 
 def get_premium_store_markup(bot_username):
-    """
-    Database se stories fetch karke buttons generate karne ka function.
-    """
-    # 1. Database se sirf stories nikalna (jisme story_name available ho)
-    all_stories = list(channels_col.find({"story_name": {"$exists": True}}))
+    # Sabhi data uthao database se
+    all_items = list(channels_col.find({}))
     
     markup = types.InlineKeyboardMarkup(row_width=1)
     
-    if not all_stories:
-        # Agar koi story nahi milti toh ye button dikhega
+    if not all_items:
         markup.add(types.InlineKeyboardButton("🚫 ɴᴏ sᴛᴏʀɪᴇs ᴀᴠᴀɪʟᴀʙʟᴇ", callback_data="none"))
     else:
-        for story in all_stories:
-            name = story.get('story_name', 'Unknown Story')
-            price = story.get('price', 'N/A')
-            item_id = story.get('item_id')
+        for item in all_items:
+            # ─── CASE 1: MANUAL ADD STORY (item_id based) ───
+            if 'story_name' in item:
+                name = item['story_name']
+                price = f"₹{item['price']}"
+                param = item['item_id']
+                icon = "🎬"
 
-            # Button Text format: 📖 Story Name — ₹Price
-            btn_text = f"📖 {name} — ₹{price}"
+            # ─── CASE 2: CHANNEL FORWARD STORY (channel_id based) ───
+            elif 'name' in item:
+                name = item['name']
+                # Isme plans hote hain, toh sabse sasta plan dikhao
+                plans = item.get('plans', {})
+                if plans:
+                    prices = [int(p) for p in plans.values()]
+                    price = f"Starts @ ₹{min(prices)}"
+                else:
+                    price = "Check Plans"
+                param = item.get('channel_id')
+                icon = "💎"
             
-            # Deep Link: Jab user click karega toh bot ke /start logic par jayega
-            # start parameter me item_id pass hoga
-            url = f"https://t.me/{bot_username}?start={item_id}"
+            else:
+                # Agar koi aisa data hai jo dono nahi hai toh skip karo
+                continue
+
+            # Button Text format
+            btn_text = f"{icon} {name} — {price}"
+            
+            # Deep Link: Manual ke liye item_id aur Forwarded ke liye channel_id
+            url = f"https://t.me/{bot_username}?start={param}"
             
             markup.add(types.InlineKeyboardButton(text=btn_text, url=url))
             
-    # Sabse niche Back button
     markup.add(types.InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
-    
     return markup
 
 def get_store_text():
-    """
-    Store menu ka caption text.
-    """
-    text = (
+    return (
         "✨ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ sᴛᴏʀᴇ</b> ✨\n"
         "────────────────────\n"
         "Niche hamari sabhi exclusive stories ki list hai.\n\n"
-        "➔ <b>ʜᴏᴡ ɪᴛ ᴡᴏʀᴋs:</b>\n"
-        "1. Apni pasand ki story select karein.\n"
-        "2. Payment plan choose karein.\n"
-        "3. Instant access payein.\n"
-        "────────────────────"
+        "➔ 🎬 = ꜱɪɴɢʟᴇ ꜱᴛᴏʀʏ\n"
+        "➔ 💎 = ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇꜱꜱ\n\n"
+        "Select karke apna access activate karein."
     )
-    return text
-
