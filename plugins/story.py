@@ -16,40 +16,45 @@ def start_add_story(message):
 def get_story_name(message):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Setup cancelled.")
     story_name = message.text
-    msg = bot.send_message(message.chat.id, "🎞️ <b>ᴇᴘɪsᴏᴅᴇs:</b>\nKitne episodes hain? (Example: 10 Episodes / Full Story):")
+    msg = bot.send_message(chat_id, "🎞️ <b>ᴇᴘɪsᴏᴅᴇs:</b>\nKitne episodes hain? (Example: Full Story):")
     bot.register_next_step_handler(msg, get_episodes, story_name)
 
 def get_episodes(message, story_name):
     episodes = message.text
-    msg = bot.send_message(message.chat.id, "🖼️ <b>ᴘᴏsᴛᴇʀ ʟɪɴᴋ:</b>\nStory ki photo ka link dein (Ending with .jpg/.png):")
-    bot.register_next_step_handler(msg, get_demo_link, story_name, episodes)
+    msg = bot.send_message(message.chat.id, "🖼️ <b>ᴘᴏsᴛᴇʀ ʟɪɴᴋ:</b>\nPoster/Photo ka direct link dein:")
+    bot.register_next_step_handler(msg, get_poster, story_name, episodes)
 
-def get_demo_link(message, story_name, episodes):
-    # Hum 'demo_link' ko hi Poster link ki tarah save kar rahe hain card view ke liye
-    photo_url = message.text
+def get_poster(message, story_name, episodes):
+    poster = message.text
+    msg = bot.send_message(message.chat.id, "📺 <b>ᴅᴇᴍᴏ ʟɪɴᴋ:</b>\nTrailer ya Demo link dein (Ya 'skip' likhein):")
+    bot.register_next_step_handler(msg, get_demo_link, story_name, episodes, poster)
+
+def get_demo_link(message, story_name, episodes, poster):
+    demo = None if message.text.lower() == 'skip' else message.text
     msg = bot.send_message(message.chat.id, "🤖 <b>ғɪɴᴀʟ ʙᴏᴛ ʟɪɴᴋ:</b>\nPayment ke baad milne wala main link dein:")
-    bot.register_next_step_handler(msg, get_final_link, story_name, episodes, photo_url)
+    bot.register_next_step_handler(msg, get_final_link, story_name, episodes, poster, demo)
 
-def get_final_link(message, story_name, episodes, photo_url):
+def get_final_link(message, story_name, episodes, poster, demo):
     final_link = message.text
-    msg = bot.send_message(message.chat.id, "💰 <b>ᴘʀɪᴄᴇ:</b>\nSirf number likhein (Example: 49):")
-    bot.register_next_step_handler(msg, save_story, story_name, episodes, photo_url, final_link)
+    msg = bot.send_message(message.chat.id, "💰 <b>ᴘʀɪᴄᴇ:</b>\nSirf number likhein (Example: 10):")
+    bot.register_next_step_handler(msg, save_story, story_name, episodes, poster, demo, final_link)
 
-def save_story(message, story_name, episodes, photo_url, final_link):
+def save_story(message, story_name, episodes, poster, demo, final_link):
     if not message.text.isdigit():
         msg = bot.send_message(message.chat.id, "❌ Price sirf number mein likhein:")
-        bot.register_next_step_handler(msg, save_story, story_name, episodes, photo_url, final_link)
+        bot.register_next_step_handler(msg, save_story, story_name, episodes, poster, demo, final_link)
         return
 
     price = message.text
     story_id = str(uuid.uuid4())[:10] 
     
-    # Database Entry (Updated Fields)
+    # DATABASE ENTRY - Yahan dhyan dein!
     channels_col.insert_one({
         "item_id": story_id,
         "story_name": story_name,
-        "episodes": episodes,      # Naya Field
-        "demo_link": photo_url,    # Photo Card ke liye
+        "episodes": episodes,
+        "poster": poster,      # Naya Poster field
+        "demo_link": demo,     # Demo field alag
         "bot_link": final_link,
         "price": price,
         "type": "story"
@@ -62,10 +67,7 @@ def save_story(message, story_name, episodes, photo_url, final_link):
         f"✅ <b>sᴛᴏʀʏ ᴀᴅᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!</b>\n"
         f"────────────────────\n"
         f"📖 Name: <b>{story_name}</b>\n"
-        f"🎞️ Episodes: <b>{episodes}</b>\n"
         f"💰 Price: <b>₹{price}</b>\n\n"
-        f"🔗 <b>ʏᴏᴜʀ sʜᴀʀᴇ ʟɪɴᴋ:</b>\n<code>{share_link}</code>\n"
-        f"────────────────────\n"
-        f"➔ Link copy karein aur Card View check karein."
+        f"🔗 <b>sʜᴀʀᴇ ʟɪɴᴋ:</b>\n<code>{share_link}</code>"
     )
     bot.send_message(message.chat.id, res, parse_mode="HTML")
