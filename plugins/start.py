@@ -4,17 +4,33 @@ from database import channels_col, users_col
 from datetime import datetime
 import config
 
+# ─── HELPER FUNCTION FOR STORE ───
+def get_store_markup():
+    # Database se sirf wo data nikalna jisme 'story_name' hai
+    all_stories = list(channels_col.find({"story_name": {"$exists": True}}))
+    markup = InlineKeyboardMarkup(row_width=1)
+    
+    if not all_stories:
+        markup.add(InlineKeyboardButton("🚫 No Stories Available", callback_data="none"))
+    else:
+        for story in all_stories:
+            # Button text: Story ka naam aur price
+            btn_text = f"📖 {story['story_name']} — ₹{story['price']}"
+            # Deep link: click karte hi payment panel khulega
+            url = f"https://t.me/{bot.get_me().username}?start={story['item_id']}"
+            markup.add(InlineKeyboardButton(btn_text, url=url))
+            
+    markup.add(InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
+    return markup
+
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     user_id = message.from_user.id
     text = message.text.split()
 
     # ─── 1. DEEP LINK ENTRY (STORY & CHANNEL) ───
-    # Jab user https://t.me/bot?start=itemid link se aaye
     if len(text) > 1:
         param = text[1]
-        
-        # Database check (Unique Item ID ya purana Channel ID)
         data = channels_col.find_one({"item_id": param}) or \
                channels_col.find_one({"channel_id": int(param) if param.replace('-','').isdigit() else 0})
 
@@ -22,13 +38,10 @@ def start_handler(message):
             markup = InlineKeyboardMarkup(row_width=1)
             db_id = data.get('item_id') or data.get('channel_id')
             
-            # CASE: STORY ACCESS
             if 'story_name' in data:
                 markup.add(InlineKeyboardButton(f"💳 ʙᴜʏ ɴᴏᴡ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
                 display_name = data['story_name']
                 header = "🎬 <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ</b>"
-            
-            # CASE: CHANNEL ACCESS
             else:
                 for p_time, p_price in data['plans'].items():
                     markup.add(InlineKeyboardButton(f"💳 {get_time_string(p_time)} - ₹{p_price}", callback_data=f"select_{db_id}_{p_time}"))
@@ -38,6 +51,9 @@ def start_handler(message):
             if data.get('demo_link'):
                 markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ", url=data['demo_link']))
             
+            # Back to home button
+            markup.add(InlineKeyboardButton("🏠 ʙᴀᴄᴋ ᴛᴏ ʜᴏᴍᴇ", callback_data="back_to_start"))
+
             premium_text = (
                 f"{header}\n"
                 f"────────────────────\n"
@@ -46,16 +62,17 @@ def start_handler(message):
             )
             return bot.send_message(message.chat.id, premium_text, reply_markup=markup, parse_mode="HTML")
 
-    # ─── 2. MAIN DASHBOARD (Bina Link ke aane par) ───
+    # ─── 2. MAIN DASHBOARD ───
     markup = InlineKeyboardMarkup(row_width=2)
     
-    # User Basic Buttons
+    # Store Button (Main highlight)
+    markup.add(InlineKeyboardButton("✨ ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀᴇ (ᴄʜᴇᴄᴋ sᴛᴏʀɪᴇs) ✨", callback_data="open_store"))
+    
     markup.add(
         InlineKeyboardButton("📊 ᴍʏ ᴅᴀsʜʙᴏᴀʀᴅ", callback_data="my_plan"),
         InlineKeyboardButton("📞 sᴜᴘᴘᴏʀᴛ", url=f"https://t.me/{config.CONTACT_USERNAME}")
     )
 
-    # Admin Special Controls
     if user_id == config.ADMIN_ID:
         markup.add(
             InlineKeyboardButton("➕ ᴀᴅᴅ sᴛᴏʀʏ", callback_data="admin_story"),
@@ -66,7 +83,6 @@ def start_handler(message):
             InlineKeyboardButton("❌ ʀᴇᴍᴏᴠᴇ sᴜʙ", callback_data="admin_remove")
         )
 
-    # Panel UI
     title = "⚡ <b>ᴀᴅᴍɪɴ ᴍᴀsᴛᴇʀ ᴘᴀɴᴇʟ</b>" if user_id == config.ADMIN_ID else "👋 <b>ᴡᴇʟᴄᴏᴍᴇ ᴍᴇᴍʙᴇʀ</b>"
     desc = "Welcome Back, Boss! Controls niche hain." if user_id == config.ADMIN_ID else "Premium access aur plans ke liye dashboard check karein."
 
@@ -78,11 +94,31 @@ def start_handler(message):
     )
     bot.send_message(message.chat.id, final_text, reply_markup=markup, parse_mode="HTML")
 
-# ─── 3. DASHBOARD CALLBACK ───
+# ─── 3. CALLBACK HANDLERS ───
+
+@bot.callback_query_handler(func=lambda call: call.data == "open_store")
+def open_store_callback(call):
+    bot.answer_callback_query(call.id)
+    markup = get_store_markup()
+    store_text = (
+        "✨ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ sᴛᴏʀᴇ</b> ✨\n"
+        "────────────────────\n"
+        "Niche hamari sabhi exclusive stories ki list hai.\n\n"
+        "➔ <b>Process:</b> Story select karein aur apna access payein."
+    )
+    bot.edit_message_text(store_text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_start")
+def back_to_start_callback(call):
+    bot.answer_callback_query(call.id)
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+    # Restart the dashboard
+    start_handler(call.message)
+
 @bot.callback_query_handler(func=lambda call: call.data == "my_plan")
 def my_plan_callback(call):
     u_id = call.from_user.id
-    bot.answer_callback_query(call.id) # Loading icon hatane ke liye
+    bot.answer_callback_query(call.id)
     
     if u_id == config.ADMIN_ID:
         all_subs = list(users_col.find().sort("expiry", 1))
