@@ -44,8 +44,8 @@ def confirm_step(call):
         price = data['price']
         display_name = data.get('story_name')
     else:
-        price = data['plans'].get(mins, "0")
-        display_name = data.get('name')
+        price = data['plans'].get(mins, "0") if isinstance(data.get('plans'), dict) else data.get('price', '0')
+        display_name = data.get('name', 'Premium Channel')
     
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -87,7 +87,7 @@ def manual_pay(call):
     if data.get('is_combo') or 'story_name' in data:
         price = data['price']
     else:
-        price = data['plans'].get(mins, "0")
+        price = data['plans'].get(mins, "0") if isinstance(data.get('plans'), dict) else data.get('price', '0')
         
     upi_string = f"upi://pay?pa={config.UPI_ID}&am={price}&cu=INR&tn=Pay_{item_id}"
     qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=350x350&data={urllib.parse.quote(upi_string)}"
@@ -107,12 +107,12 @@ def manual_pay(call):
         bot.send_message(call.message.chat.id, f"📲 <b>ᴜᴘɪ ɪᴅ:</b> <code>{config.UPI_ID}</code>\nAmount: <b>₹{price}</b>\n\n➔ Pay karne ke baad niche button dabayein.", reply_markup=markup, parse_mode="HTML")
 
 
-# --- 3. DIRECT SCREENSHOT SUBMISSION (With Cancel Interceptor) ---
+# --- 3. DIRECT SCREENSHOT SUBMISSION ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('paid_'))
 def handle_paid(call):
     parts = call.data.split('_')
     mins = parts[-1]
-    item_id = "_".join(parts[1:-1]) # Fix: Dynamic item_id handling for paid_
+    item_id = "_".join(parts[1:-1])
     bot.answer_callback_query(call.id)
     
     try: bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -175,15 +175,12 @@ def process_inline_cancel(call):
     return send_home_menu(call.message.chat.id)
 
 
-# --- 🌟 BACK TO KEYBOARD LIST ENGINE (VIDEO OPTIMIZATION HOOK) ───
-# start.py me humne confirmation text par ek button diya hai return_to_list_... usko ye catch karega
+# --- 🌟 BACK TO KEYBOARD LIST ENGINE ───
 @bot.callback_query_handler(func=lambda call: call.data.startswith("return_to_list_"))
 def return_to_list_callback(call):
     bot.answer_callback_query(call.id)
     user_id = call.from_user.id
     
-    # start.py ke global USER_STATES dict se current page data pull out karenge
-    # Agar start.py me koi user cache clean hua ho toh fallback logic handle karega
     from main import USER_STATES
     state = USER_STATES.get(user_id, {"category": "story", "page": 1})
     
@@ -192,18 +189,16 @@ def return_to_list_callback(call):
     
     bot_username = bot.get_me().username
     markup = get_items_by_category_markup(state["category"], bot_username, page=state["page"])
-    
-    # User ko wapas bina typing screen freeze kiye keyboard dynamic store list list par fenk dega
     bot.send_message(call.message.chat.id, "👇 <i>apni pasand ka item select karke full access lein:</i>", reply_markup=markup, parse_mode="HTML")
 
 
-# --- 4. ADMIN APPROVAL (UPDATED WITH MULTI-ID COMBO LINKS SUPPORT) ---
+# --- 4. ADMIN APPROVAL (FIXED AND SEPARATED FLOWS) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('app_'))
 def admin_approve(call):
     parts = call.data.split('_')
     u_id = parts[1]
     mins = parts[-1]
-    item_id = "_".join(parts[2:-1]) # Fix: Safe multi-underscore ID extract
+    item_id = "_".join(parts[2:-1]) 
     
     data = channels_col.find_one({"item_id": item_id}) or \
            channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
@@ -214,10 +209,9 @@ def admin_approve(call):
     expiry = int(time.time()) + (int(mins) * 60) if mins != 'manual' else int(time.time()) + (365*24*60*60)
     markup = InlineKeyboardMarkup(row_width=1)
 
-    # ─── CASE A: COMBO PACK APPROVAL (Loop For Multi Channels Join Links) ───
+    # ─── CASE A: COMBO PACK APPROVAL ───
     if data.get('is_combo') and 'channels_list' in data:
         msg = "🎁 <b><b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋ ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nAapko sabhi linked channels ka access de diya gaya hai. Niche diye buttons se join karein:\n\n"
-        
         for ch_id in data['channels_list']:
             users_col.update_one({"user_id": int(u_id), "channel_id": int(ch_id)}, {"$set": {"expiry": expiry}}, upsert=True)
             try:
@@ -227,24 +221,26 @@ def admin_approve(call):
                 markup.add(InlineKeyboardButton(f"📢 Join: {ch_title}", url=invite.invite_link))
             except Exception as e:
                 print(f"Combo Link Gen Error for {ch_id}: {e}")
-                
         msg += "⚠️ <i>Sabhi links single-use hain, ek baar join hone ke baad automatic expire ho jayengi!</i>"
 
-    # ─── CASE B: VIP CHANNEL APPROVAL (Single Link) ───
-    elif 'story_name' not in data and 'channel_id' in data:
-        users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
+    # ─── CASE B: FORWARDED CHANNEL APPROVAL (Strict Filter - Fixed Bug) ───
+    elif 'channel_id' in data and 'story_name' not in data:
+        target_channel = int(data['channel_id'])
+        users_col.update_one({"user_id": int(u_id), "channel_id": target_channel}, {"$set": {"expiry": expiry}}, upsert=True)
         try:
-            invite = bot.create_chat_invite_link(data['channel_id'], member_limit=1)
-            markup.add(InlineKeyboardButton("📢 Join Channel", url=invite.invite_link))
-            msg = "✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nChannel join karne ke liye niche click karein:\n\n⚠️ <i>Yeh link single use hai, ek baar join hone ke baad automatic expire ho jayegi!</i>"
-        except: 
-            msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\nBot invite link generate nahi kar saka, admin se contact karein."
+            # 🌟 Yahan limit 1 wala private join link create ho raha hai
+            invite = bot.create_chat_invite_link(chat_id=target_channel, member_limit=1)
+            markup.add(InlineKeyboardButton("🔐 JOIN PREMIUM CHANNEL", url=invite.invite_link))
+            msg = f"✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nChannel: <b>{data.get('name', 'VIP Channel')}</b>\n\nJoin karne ke liye neeche button par click karein:\n\n⚠️ <i>Yeh link single use hai, ek baar use hone ke baad automatic expire ho jayegi!</i>"
+        except Exception as e: 
+            print(f"Error creating link for channel {target_channel}: {e}")
+            msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nBot private invite link generate nahi kar saka. Please ensure karein ki bot channel mein Admin hai aur uske paas 'Invite Users' permission hai."
 
     # ─── CASE C: SINGLE STORY APPROVAL (Bot Start Link) ───
     else:
         users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
-        markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀỹ", url=data['bot_link']))
-        msg = f"✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nStory: <b>{data['story_name']}</b>\nNiche button se access karein:"
+        markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀỹ", url=data.get('bot_link', 'https://t.me')))
+        msg = f"✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nStory: <b>{data.get('story_name', 'Premium Story')}</b>\nNiche button se access karein:"
 
     try:
         bot.send_message(u_id, msg, reply_markup=markup, parse_mode="HTML", protect_content=True)
