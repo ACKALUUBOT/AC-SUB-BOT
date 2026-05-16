@@ -1,16 +1,19 @@
 import uuid
+import re
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils import bot
 from database import channels_col, users_col
 import config
+
+# 🌟 GLOBAL MEMORY ROUTER: Long data aur Photo IDs ko safety se temporary hold karne ke liye
+admin_setup_session = {}
 
 # ==========================================
 # --- 1. REMOVE USER (SECURE DELETE) ---
 # ==========================================
 @bot.message_handler(commands=['remove'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def remove_user_start(message):
-    if message.from_user.id != config.ADMIN_ID: return
-    chat_id = message.chat.id if hasattr(message, 'chat') else message.message.chat.id
+    chat_id = message.chat.id
     msg = bot.send_message(
         chat_id, 
         "👤 <b>User ko remove karein:</b>\n\nUs user ki <b>ID</b> bhejein jiska access khatam karna hai (ya /cancel):", 
@@ -39,7 +42,7 @@ def process_remove_user(message):
 # ==========================================
 @bot.message_handler(commands=['channels'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def list_channels(message):
-    chat_id = message.chat.id if hasattr(message, 'chat') else message.message.chat.id
+    chat_id = message.chat.id
     cursor = channels_col.find()
     markup = InlineKeyboardMarkup()
     for ch in cursor:
@@ -74,7 +77,7 @@ def manage_ch(call):
     except: pass
 
     photo_id = ch_data.get('file_id')
-    if photo_id:
+    if photo_id and photo_id != "None":
         bot.send_photo(call.message.chat.id, photo=photo_id, caption=text, parse_mode="HTML")
     else:
         bot.send_message(call.message.chat.id, text=text, parse_mode="HTML")
@@ -85,17 +88,20 @@ def manage_ch(call):
 # ==========================================
 @bot.message_handler(commands=['add'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def add_start(message):
-    chat_id = message.chat.id if hasattr(message, 'chat') else message.message.chat.id
+    chat_id = message.chat.id
+    admin_setup_session[message.from_user.id] = {} # User session initialization
+    
     msg = bot.send_message(
         chat_id, 
-        "📢 <b>add  item:</b>\n\n"
-        "➔ <b>Channel Setup:</b> Kisi channel ka koi post <b>Forward</b> karein.\n"
-        "➔ <b>Direct Photo Setup:</b> Ek <b>Photo</b> bhejein jiska <b>Caption</b> Story ka naam ho:", 
+        "📢 <b>ᴀᴅᴅ ᴄʜᴀɴɴᴇʟ sʏsᴛᴇᴍ:</b>\n\n"
+        "➔ <b>Way 1 (Forward):</b> Channel ka koi post <b>Forward</b> karein.\n"
+        "➔ <b>Way 2 (Direct Photo):</b> Ek <b>Photo</b> bhejein jiska <b>Caption</b> Channel/Story ka naam ho:", 
         parse_mode="HTML"
     )
     bot.register_next_step_handler(msg, route_setup_type)
 
 def route_setup_type(message):
+    user_id = message.from_user.id
     if message.text and message.text == "/cancel":
         return bot.send_message(message.chat.id, "❌ Action cancelled.")
 
@@ -106,200 +112,168 @@ def route_setup_type(message):
         ch_id = message.forward_from_chat.id
         ch_name = message.forward_from_chat.title
         
-        msg = bot.send_message(
-            message.chat.id, 
-            f"✅ <b>Channel Detected:</b> {ch_name}\n\n"
-            f"Plans likhein (Format - Min:Price):\nExample: <code>1440:30, 10080:150</code>", 
-            parse_mode="HTML"
-        )
-        bot.register_next_step_handler(msg, channel_ask_photo, ch_id, ch_name)
-
-    # ──────────────────────────────────────────
-    # [FLOW 2] DIRECT PHOTO UPLOAD MODE (STORY SYSTEM)
-    # ──────────────────────────────────────────
-    elif message.photo:
-        file_id = message.photo[-1].file_id
-        story_name = message.caption.split("\n")[0] if message.caption else "Untitled Story"
+        admin_setup_session[user_id] = {
+            "type": "channel",
+            "channel_id": ch_id,
+            "story_name": ch_name
+        }
         
         msg = bot.send_message(
             message.chat.id, 
-            f"🎬 <b>Story Detected:</b> {story_name}\n\n"
-            f"Is Story ka Price likhein (Example: 49):", 
+            f"✅ <b>Channel Detected (Forward):</b> {ch_name}\n\n"
+            f"Plans likhein (Format - Min:Price):\nExample: <code>1440:30, 10080:150</code>", 
             parse_mode="HTML"
         )
-        bot.register_next_step_handler(msg, story_ask_platform, story_name, file_id)
+        bot.register_next_step_handler(msg, channel_ask_photo)
+
+    # ──────────────────────────────────────────
+    # [FLOW 2] DIRECT PHOTO UPLOAD MODE (NOW CREATING CHANNEL)
+    # ──────────────────────────────────────────
+    elif message.photo:
+        file_id = message.photo[-1].file_id
+        # Single line save command apply kiya caption par
+        ch_name = message.caption.split("\n")[0].strip() if message.caption else "Untitled Channel"
+        
+        # Unique mock channel hash create karna backend process bypass ke liye
+        fake_ch_id = int(f"-100{str(uuid.uuid4().int)[:9]}")
+        
+        admin_setup_session[user_id] = {
+            "type": "channel",
+            "channel_id": fake_ch_id,
+            "story_name": ch_name,
+            "file_id": file_id
+        }
+        
+        msg = bot.send_message(
+            message.chat.id, 
+            f"🖼️ <b>Channel Detected (Photo Mode):</b> {ch_name}\n\n"
+            f"Plans likhein (Format - Min:Price):\nExample: <code>1440:30, 10080:150</code>", 
+            parse_mode="HTML"
+        )
+        bot.register_next_step_handler(msg, photo_channel_get_plans)
         
     else:
         msg = bot.send_message(message.chat.id, "❌ Galat input! Kripya post forward karein ya direct photo bhejein:")
         bot.register_next_step_handler(msg, route_setup_type)
 
 
-# ─── FLOW 1: CHANNEL SETUP HANDLERS ───
-def channel_ask_photo(message, ch_id, ch_name):
+# ─── FLOW 1: FORWARD CHANNEL HANDLERS ───
+def channel_ask_photo(message):
+    user_id = message.from_user.id
     if message.text and message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    plans_data = message.text.strip()
+    
+    admin_setup_session[user_id]["plans_data"] = message.text.strip()
     
     msg = bot.send_message(
         message.chat.id, 
         "🖼️ <b>ᴄʜᴀɴɴᴇʟ ᴘʜᴏᴛᴏ:</b>\n"
-        "Aap is channel ke liye koi custom photo lagana chahte hain?\n\n"
+        "Aap is forward channel ke liye koi custom photo lagana chahte hain?\n\n"
         "➔ Ek <b>Photo</b> bhejein.\n"
         "➔ Ya bina photo ke save karne ke liye <code>skip</code> likhein:",
         parse_mode="HTML"
     )
-    bot.register_next_step_handler(msg, channel_ask_demo, ch_id, ch_name, plans_data)
+    bot.register_next_step_handler(msg, channel_ask_demo)
 
-def channel_ask_demo(message, ch_id, ch_name, plans_data):
+def channel_ask_demo(message):
+    user_id = message.from_user.id
     if message.text and message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
     
-    file_id = None
+    file_id = "None"
     if message.photo:
         file_id = message.photo[-1].file_id
     
+    admin_setup_session[user_id]["file_id"] = file_id
+    
     msg = bot.send_message(message.chat.id, "🔗 Demo Link bhejein (Ya 'skip' ya 'none' likhein):")
-    bot.register_next_step_handler(msg, channel_ask_platform, ch_id, ch_name, plans_data, file_id)
+    bot.register_next_step_handler(msg, channel_ask_platform)
 
-def channel_ask_platform(message, ch_id, ch_name, plans_data, file_id):
+
+# ─── FLOW 2: DIRECT PHOTO CHANNEL HANDLERS ───
+def photo_channel_get_plans(message):
+    user_id = message.from_user.id
     if message.text and message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
     
-    # 🌟 NEW CHANNEL FLOW SOURCE SELECTOR
-    markup = InlineKeyboardMarkup(row_width=2)
-    # Callback data pass parameters: type_chID_plansData_demoLink_fileID
-    # Content strings filtered dynamically via custom callback router
-    markup.add(
-        InlineKeyboardButton("✨ PRATILIPI FM", callback_data=f"src_pratilipi_chan"),
-        InlineKeyboardButton("🔥 POCKET FM", callback_data=f"src_pocket_chan")
-    )
+    admin_setup_session[user_id]["plans_data"] = message.text.strip()
     
-    # Session state pass backup using temporary processing text
-    bot.send_message(
-        message.chat.id, 
-        f"🎯 <b>Choose Channel Platform:</b>\nChannel: <code>{ch_name}</code>\nPlans: <code>{plans_data}</code>\nDemo: <code>{demo}</code>\n\nIs channel ko kis category me dalna hai?",
-        reply_markup=markup,
-        parse_mode="HTML"
-    )
-    # Temporary global payload mapping context trigger to pass long data fields safely
-    bot.pin_chat_message(message.chat.id, bot.send_message(message.chat.id, f"📝 CACHE_DATA|{ch_id}|{ch_name}|{plans_data}|{demo}|{file_id}").message_id, disable_notification=True)
+    msg = bot.send_message(message.chat.id, "🔗 Demo Link bhejein (Ya 'skip' ya 'none' likhein):")
+    bot.register_next_step_handler(msg, channel_ask_platform)
 
 
-# ─── FLOW 2: DIRECT PHOTO STORY HANDLERS ───
-def story_ask_platform(message, story_name, file_id):
+# ─── COMMON PLATFORM SELECTOR FOR CHANNELS ───
+def channel_ask_platform(message):
+    user_id = message.from_user.id
     if message.text and message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    price = message.text.strip()
+    demo = "None" if message.text.lower() in ['none', 'skip'] else message.text.strip()
+    
+    admin_setup_session[user_id]["demo_link"] = demo
+    session = admin_setup_session[user_id]
     
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton("✨ PRATILIPI FM", callback_data=f"setplatform_pratilipi_{price}"),
-        InlineKeyboardButton("🔥 POCKET FM", callback_data=f"setplatform_pocket_{price}")
+        InlineKeyboardButton("✨ PRATILIPI FM", callback_data="src_pratilipi"),
+        InlineKeyboardButton("🔥 POCKET FM", callback_data="src_pocket")
     )
     
     bot.send_message(
         message.chat.id, 
-        f"🎯 <b>Choose Story Platform:</b>\n\nStory <code>{story_name}</code> kis platform ki category mein dikhani hai?", 
+        f"🎯 <b>Choose Channel Platform:</b>\n"
+        f"──────────────────────────\n"
+        f"👑 Channel: <code>{session['story_name']}</code>\n"
+        f"📊 Plans: <code>{session['plans_data']}</code>\n"
+        f"🔗 Demo: <code>{demo}</code>\n"
+        f"🖼️ Photo: <code>{'Attached ✅' if session['file_id'] != 'None' else 'None ❌'}</code>\n"
+        f"──────────────────────────\n"
+        f"Is channel ko kis category me dalna hai?",
         reply_markup=markup,
         parse_mode="HTML"
     )
-    bot.pin_chat_message(message.chat.id, bot.send_message(message.chat.id, f"📝 STORY_FID|{file_id}").message_id, disable_notification=True)
 
 
 # ==========================================
 # --- 4. EXCLUSIVE CALLBACK SOURCE ROUTER ---
 # ==========================================
-@bot.callback_query_handler(func=lambda call: call.data.startswith('src_') or call.data.startswith('setplatform_'))
+@bot.callback_query_handler(func=lambda call: call.data.startswith('src_'))
 def handle_universal_source_selection(call):
-    data_split = call.data.split('_')
-    action_prefix = data_split[0]
-    source = data_split[1]
+    user_id = call.from_user.id
+    bot.answer_callback_query(call.id)
     
-    # ─── HANDLER FOR FLOW 1 (CHANNEL) ───
-    if action_prefix == "src":
+    source = call.data.split('_')[1]
+    session = admin_setup_session.get(user_id)
+    
+    if not session:
+        return bot.send_message(call.message.chat.id, "❌ Session Expired! Please use /add again.")
+    
+    try:
+        plans_data = session["plans_data"]
         try:
-            # Unpin and parse dynamic system logs cached
-            chat_id = call.message.chat.id
-            # Safe scanning logic for extraction 
-            history = list(channels_col.find({"temp_log": {"$exists": True}})) # Alternative to raw parsing text
-            
-            # Simple message verification parse from active chat state
-            msg_text = call.message.text
-            ch_name = msg_text.split("Channel: ")[1].split("\n")[0].replace("<code>", "").replace("</code>", "").strip()
-            plans_data = msg_text.split("Plans: ")[1].split("\n")[0].replace("<code>", "").replace("</code>", "").strip()
-            demo_data = msg_text.split("Demo: ")[1].split("\n")[0].replace("<code>", "").replace("</code>", "").strip()
-            demo = None if demo_data == "None" else demo_data
-            
-            # Reconstruct variables dynamically from state text cleanly
-            try:
-                plans = {p.split(':')[0].strip(): p.split(':')[1].strip() for p in plans_data.split(',')}
-            except:
-                return bot.send_message(chat_id, "❌ Plans pattern calculation failure.")
-            
-            item_id = str(uuid.uuid4())[:10]
-            fake_ch_id = int(f"-100{str(uuid.uuid4().int)[:9]}")
-            
-            channels_col.insert_one({
-                "item_id": item_id,
-                "channel_id": fake_ch_id,
-                "story_name": ch_name, # Stored as story_name pattern for integrated query processing
-                "plans_options": plans,
-                "price": min([int(p) for p in plans.values()]) if plans else 0, # Auto Base price index setup
-                "demo_link": demo,
-                "file_id": None,
-                "type": "story",
-                "source": source
-            })
-            
-            try: bot.delete_message(chat_id, call.message.message_id)
-            except: pass
-            
-            link = f"https://t.me/{bot.get_me().username}?start={item_id}"
-            return bot.send_message(chat_id, f"✅ <b>ᴄʜᴀɴɴᴇʟ sᴇᴛᴜᴘ ғɪɴɪsʜᴇᴅ!</b>\n\nPlatform: <code>{source.upper()}</code>\nLink: <code>{link}</code>", parse_mode="HTML")
-        except Exception as e:
-            return bot.send_message(call.message.chat.id, f"❌ Channel save runtime error: {str(e)}")
-
-    # ─── HANDLER FOR FLOW 2 (DIRECT PHOTO STORY) ───
-    elif action_prefix == "setplatform":
-        price = data_split[2]
-        story_name = call.message.text.split("Story ")[1].split(" kis")[0].replace("<code>", "").replace("</code>", "").strip()
+            plans = {p.split(':')[0].strip(): p.split(':')[1].strip() for p in plans_data.split(',')}
+        except:
+            return bot.send_message(call.message.chat.id, "❌ Plans format syntax error! Kripya sahi format use karein.")
+        
+        item_id = str(uuid.uuid4())[:10]
+        demo = None if session["demo_link"] == "None" else session["demo_link"]
+        
+        # Database document save logic
+        channels_col.insert_one({
+            "item_id": item_id,
+            "channel_id": session["channel_id"],
+            "story_name": session["story_name"], 
+            "plans_options": plans,
+            "price": min([int(p) for p in plans.values()]) if plans else 0, 
+            "demo_link": demo,
+            "file_id": session["file_id"], # Photo string safely synced here
+            "type": "channel",
+            "source": source
+        })
         
         try: bot.delete_message(call.message.chat.id, call.message.message_id)
         except: pass
         
-        msg = bot.send_message(
-            call.message.chat.id, 
-            f"🤖 [Platform: {source.upper()}]\n"
-            f"<b>Final Access Link:</b>\n"
-            f"User ke payment karne par jo main target link milna chahiye, woh bhejein:"
-        )
-        bot.register_next_step_handler(msg, story_ask_demo_with_source, story_name, price, source)
-
-def story_ask_demo_with_source(message, story_name, price, source):
-    if message.text and message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    final_link = message.text.strip()
-    
-    msg = bot.send_message(message.chat.id, "🔗 Demo Link bhejein (Ya 'skip' ya 'none' likhein):")
-    bot.register_next_step_handler(msg, finalize_story_setup_with_source, story_name, price, final_link, source)
-
-def finalize_story_setup_with_source(message, story_name, price, final_link, source):
-    if message.text and message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
-    
-    item_id = str(uuid.uuid4())[:10]
-    fake_channel_id = int(f"-100{str(uuid.uuid4().int)[:9]}")
-    
-    channels_col.insert_one({
-        "item_id": item_id,
-        "channel_id": fake_channel_id,
-        "story_name": story_name,
-        "price": int(price) if price.isdigit() else price,
-        "bot_link": final_link,
-        "demo_link": demo,
-        "file_id": None,
-        "type": "story",
-        "source": source
-    })
-    
-    link = f"https://t.me/{bot.get_me().username}?start={item_id}"
-    bot.send_message(message.chat.id, f"✅ <b>sᴛᴏʀʏ sᴇᴛᴜᴘ ғɪɴɪsʜᴇᴅ!</b>\n\nPlatform: <code>{source.upper()}</code>\nLink: <code>{link}</code>", parse_mode="HTML")
+        link = f"https://t.me/{bot.get_me().username}?start={item_id}"
+        admin_setup_session.pop(user_id, None) # Clear volatile user cache memory
+        return bot.send_message(call.message.chat.id, f"✅ <b>ᴄʜᴀɴɴᴇʟ sᴇᴛᴜᴘ ғɪɴɪsʜᴇᴅ!</b>\n\nPlatform: <code>{source.upper()}</code>\nLink: <code>{link}</code>", parse_mode="HTML")
+    except Exception as e:
+        return bot.send_message(call.message.chat.id, f"❌ Channel save execution error: {str(e)}")
 
 
 # ==========================================
@@ -314,7 +288,7 @@ def add_combo_manual_handler(message):
     
     if not command_text or "|" not in command_text:
         error_msg = (
-            "💡 <b>ʜᴏᴡ ᴛᴏ ᴀ提ᴅ ᴄᴏᴍʙᴏ ᴍᴀɴᴜᴀʟʟʏ:</b>\n\n"
+            "💡 <b>ʜᴏᴡ ᴛᴏ ᴀDᴅ ᴄᴏᴍʙᴏ ᴍᴀɴᴜᴀʟʟʏ:</b>\n\n"
             "Format mein <code>|</code> (pipe symbol) ka use karein:\n"
             "<code>/add_combo Price | Name | Description | IDs</code>\n\n"
             "📝 <b>Example:</b>\n"
