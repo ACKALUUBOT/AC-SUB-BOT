@@ -70,6 +70,7 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
         markup.add(types.KeyboardButton(btn_text))
             
     # ─── NAVIGATION BUTTONS ROW ───
+
     nav_buttons = []
     if page > 1:
         nav_buttons.append(types.KeyboardButton("‹ PREV"))
@@ -79,10 +80,10 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
     if nav_buttons:
         markup.row(*nav_buttons)
         
-    # Main exit options at bottom
+    # Main exit options at bottom ─── 🌟 UPDATED WITH CLOSE BUTTON 🌟
     markup.add(types.KeyboardButton("🔙 BACK TO CATEGORIES"))
+    markup.add(types.KeyboardButton("❌ CLOSE STORE"))  # Naya Close Button add kiya
     return markup
-
 
 # ─── 3. TEXT FOR CATEGORIES PAGE (UPDATED DESCRIPTIONS) ───
 def get_store_text():
