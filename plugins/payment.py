@@ -1,9 +1,12 @@
 import urllib.parse
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from utils import bot, get_time_string
 from database import channels_col, users_col
 import config
 import time
+
+# Hum start.py ke naye components ko import kar rahe hain taaki back path smoothly kaam kare
+from plugins.store import get_items_by_category_markup, get_categories_markup, get_store_text
 
 # ===================================================
 # --- EXTRA CONFIG: FRESH START MENU RE-LOAD ---
@@ -173,6 +176,28 @@ def process_inline_cancel(call):
     return send_home_menu(call.message.chat.id)
 
 
+# --- 🌟 BACK TO KEYBOARD LIST ENGINE (VIDEO OPTIMIZATION HOOK) ───
+# start.py me humne confirmation text par ek button diya hai return_to_list_... usko ye catch karega
+@bot.callback_query_handler(func=lambda call: call.data.startswith("return_to_list_"))
+def return_to_list_callback(call):
+    bot.answer_callback_query(call.id)
+    user_id = call.from_user.id
+    
+    # start.py ke global USER_STATES dict se current page data pull out karenge
+    # Agar start.py me koi user cache clean hua ho toh fallback logic handle karega
+    from main import USER_STATES
+    state = USER_STATES.get(user_id, {"category": "story", "page": 1})
+    
+    try: bot.delete_message(call.message.chat.id, call.message.message_id)
+    except: pass
+    
+    bot_username = bot.get_me().username
+    markup = get_items_by_category_markup(state["category"], bot_username, page=state["page"])
+    
+    # User ko wapas bina typing screen freeze kiye keyboard dynamic store list list par fenk dega
+    bot.send_message(call.message.chat.id, "👇 <i>apni pasand ka item select karke full access lein:</i>", reply_markup=markup, parse_mode="HTML")
+
+
 # --- 4. ADMIN APPROVAL (UPDATED WITH MULTI-ID COMBO LINKS SUPPORT) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('app_'))
 def admin_approve(call):
@@ -195,16 +220,11 @@ def admin_approve(call):
         msg = "🎁 <b><b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋ ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nAapko sabhi linked channels ka access de diya gaya hai. Niche diye buttons se join karein:\n\n"
         
         for ch_id in data['channels_list']:
-            # Database me har channel ke liye alag entry banao expiry ke sath
             users_col.update_one({"user_id": int(u_id), "channel_id": int(ch_id)}, {"$set": {"expiry": expiry}}, upsert=True)
             try:
-                # Telegram server se single-use unique join link generate karo
                 invite = bot.create_chat_invite_link(int(ch_id), member_limit=1)
-                
-                # Button pe name show karne ke liye channel title fetch karo
                 ch_info = channels_col.find_one({"channel_id": int(ch_id)})
                 ch_title = ch_info.get('name') or ch_info.get('story_name') if ch_info else f"VIP Channel {ch_id}"
-                
                 markup.add(InlineKeyboardButton(f"📢 Join: {ch_title}", url=invite.invite_link))
             except Exception as e:
                 print(f"Combo Link Gen Error for {ch_id}: {e}")
