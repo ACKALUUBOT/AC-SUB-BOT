@@ -9,8 +9,8 @@ def get_categories_markup():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     
     markup.add(
-        types.KeyboardButton("🔥 SINGLE STORIES (LATEST)"),
-        types.KeyboardButton("👑 VIP CHANNEL ACCESS"),
+        types.KeyboardButton("✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs (ʙᴏᴛ ʟɪɴᴋ))"),
+        types.KeyboardButton(": 📢 ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ ᴄʜᴀɴɴᴇʟ (ᴠɪᴘ)"),
         types.KeyboardButton("🎁 SPECIAL COMBO PACKS (BIG SAVE)"),
         types.KeyboardButton("« BACK TO MENU")
     )
