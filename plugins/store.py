@@ -2,12 +2,11 @@ from telebot import types
 from database import channels_col
 import config
 
-# ─── 1. BOTTOM KEYBOARD CATEGORIES MENU (UPDATED NAAM) ───
+# ─── 1. BOTTOM KEYBOARD CATEGORIES MENU ───
 def get_categories_markup():
     """User ko niche keyboard me categories aur Combo Pack ka option dikhane ke liye"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     
-    # FIX: Buttons ke naam start.py ke checks se 100% match kar diye hain
     markup.add(
         types.KeyboardButton("✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs (ʙᴏᴛ ʟɪɴᴋ)"),
         types.KeyboardButton("📢 ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ ᴄʜᴀɴɴᴇʟ (ᴠɪᴘ)"),
@@ -30,6 +29,7 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
     elif category_type == "combo":
         all_items = list(channels_col.find({"is_combo": True}))
         
+    # 🌟 FIXED: Agar category khali hai toh direct ye block trigger hoga
     if not all_items:
         markup.add(types.KeyboardButton("🚫 STORE IS EMPTY"))
         markup.add(types.KeyboardButton("🔙 BACK TO CATEGORIES"))
@@ -53,13 +53,12 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
         if category_type == "story":
             name = item['story_name']
             price = f"[ ₹{item['price']} ]"
-            # Video style format: "1. Story Name [ ₹130 ]"
             btn_text = f"{index}. {name} {price}"
             
         elif category_type == "channel":
             name = item['name']
             plans = item.get('plans', {})
-            price = f"[ Starts @ ₹{min([int(p) for p in plans.values()])} ]" if plans else "[ Check Plans ]"
+            price = f"[ ₹{min([int(p) for p in plans.values()])} ]" if plans else "[ Check Plans ]"
             btn_text = f"💎 {name} ➔ {price}"
             
         elif category_type == "combo":
@@ -70,7 +69,6 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
         markup.add(types.KeyboardButton(btn_text))
             
     # ─── NAVIGATION BUTTONS ROW ───
-
     nav_buttons = []
     if page > 1:
         nav_buttons.append(types.KeyboardButton("‹ PREV"))
@@ -80,12 +78,13 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
     if nav_buttons:
         markup.row(*nav_buttons)
         
-    # Main exit options at bottom ─── 🌟 UPDATED WITH CLOSE BUTTON 🌟
+    # Main exit options at bottom
     markup.add(types.KeyboardButton("🔙 BACK TO CATEGORIES"))
-    markup.add(types.KeyboardButton("❌ CLOSE STORE"))  # Naya Close Button add kiya
+    markup.add(types.KeyboardButton("❌ CLOSE STORE"))
     return markup
 
-# ─── 3. TEXT FOR CATEGORIES PAGE (UPDATED DESCRIPTIONS) ───
+
+# ─── 3. TEXT FOR CATEGORIES PAGE ───
 def get_store_text():
     return (
         "🛍️ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ ᴄᴀᴛᴇɢᴏʀɪᴇs</b> 🛍️\n"
