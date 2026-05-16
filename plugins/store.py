@@ -9,7 +9,7 @@ def get_premium_store_markup(bot_username):
     markup = types.InlineKeyboardMarkup(row_width=1)
     
     if not all_items:
-        markup.add(types.InlineKeyboardButton("🚫 ɴᴏ sᴛᴏʀɪᴇs ᴀᴠᴀɪʟᴀʙʟᴇ", callback_data="none"))
+        markup.add(types.InlineKeyboardButton("🚫 sᴛᴏʀᴇ ɪs ᴇᴍᴘᴛʏ", callback_data="none"))
     else:
         for item in all_items:
             # ─── CASE 1: MANUAL ADD STORY (item_id based) ───
@@ -17,7 +17,8 @@ def get_premium_store_markup(bot_username):
                 name = item['story_name']
                 price = f"₹{item['price']}"
                 param = item['item_id']
-                icon = "🎬"
+                icon = "🔥" # Hot trending look for single stories
+                badge = " [sᴛᴏʀʏ]"
 
             # ─── CASE 2: CHANNEL FORWARD STORY (channel_id based) ───
             elif 'name' in item:
@@ -30,29 +31,32 @@ def get_premium_store_markup(bot_username):
                 else:
                     price = "Check Plans"
                 param = item.get('channel_id')
-                icon = "💎"
+                icon = "👑" # Royal VIP look for full channels
+                badge = " [<b>ᴄʜᴀɴɴᴇʟ</b>]"
             
             else:
                 # Agar koi aisa data hai jo dono nahi hai toh skip karo
                 continue
 
-            # Button Text format
-            btn_text = f"{icon} {name} — {price}"
+            # Premium Button Text Format with Smooth Arrows
+            btn_text = f"{icon} {name}{badge} ➔ {price}"
             
             # Deep Link: Manual ke liye item_id aur Forwarded ke liye channel_id
             url = f"https://t.me/{bot_username}?start={param}"
             
             markup.add(types.InlineKeyboardButton(text=btn_text, url=url))
             
+    # Back to Menu button with slick font
     markup.add(types.InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
     return markup
 
 def get_store_text():
     return (
         "✨ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ sᴛᴏʀᴇ</b> ✨\n"
-        "────────────────────\n"
-        "Niche hamari sabhi exclusive stories ki list hai.\n\n"
-        "➔ 🎬 = ꜱɪɴɢʟᴇ ꜱᴛᴏʀʏ\n"
-        "➔ 💎 = ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇꜱꜱ\n\n"
-        "Select karke apna access activate karein."
+        "──────────────────────────\n"
+        "Niche hamari sabhi hot, exclusive aur trending content ki list hai.\n\n"
+        "📌 <b>ɪᴄᴏɴ ɢᴜɪᴅᴇ:</b>\n"
+        "➔ 🔥 = <code>sɪɴɢʟᴇ sᴛᴏʀʏ ᴀᴄᴄᴇss</code>\n"
+        "➔ 👑 = <code>ᴠɪᴘ ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss</code>\n\n"
+        "👇 <i>Apni pasand ka item select karke full access lein:</i>"
     )
