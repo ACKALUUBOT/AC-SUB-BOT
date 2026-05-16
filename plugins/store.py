@@ -1,5 +1,5 @@
 from telebot import types
-From telebot import types
+from telebot import types
 from database import channels_col
 import config
 
