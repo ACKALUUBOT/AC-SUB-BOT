@@ -29,20 +29,26 @@ def start_handler(message):
                 header = "🎁 <b>ᴘʀᴇᴍɪᴜᴍ sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ʙᴜɴᴅʟᴇ</b>"
                 desc_text = f"📝 <b>ɪɴᴄʟᴜᴅᴇᴅ sᴛᴏʀɪᴇs:</b>\n<i>{data.get('description', 'Multiple premium stories inside!')}</i>"
             
-            # CONDITION 2: SINGLE STORY
+            # CONDITION 2: SINGLE STORY (Bot Link Access Added)
             elif 'story_name' in data:
                 markup.add(InlineKeyboardButton(f"💳 ⚡ ᴜɴʟᴏᴄᴋ sᴛᴏʀʏ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
                 display_name = data['story_name']
                 header = "🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ</b>"
-                desc_text = "⚡ <i>Instant access paane ke liye niche se payment karein.</i>"
+                desc_text = (
+                    "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>\n"
+                    "⚡ <i>ɪs sᴛᴏʀʏ ᴋᴏ ʙᴜʏ ᴋᴀʀɴᴇ ᴘᴀʀ ᴀᴀᴘᴋᴏ ᴘʀᴇᴍɪᴜᴍ ʙᴏᴛ ᴋɪ ʟɪɴᴋ ᴍɪʟᴇɢɪ.</i>"
+                )
             
-            # CONDITION 3: VIP CHANNEL
+            # CONDITION 3: VIP CHANNEL (Channel Link Access Added)
             else:
                 for p_time, p_price in data['plans'].items():
                     markup.add(InlineKeyboardButton(f"👑 {get_time_string(p_time)} Access ➔ ₹{p_price}", callback_data=f"select_{db_id}_{p_time}"))
                 display_name = data.get('name', 'Premium Access')
                 header = "👑 <b>ᴠɪᴘ ᴄʜᴀɴɴᴇʟ sᴜʙsᴄʀɪᴘᴛɪᴏɴ</b>"
-                desc_text = "⚡ <i>Instant access paane ke liye niche se apna plan select karke payment karein.</i>"
+                desc_text = (
+                    "📢 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code><b>ᴄʜᴀɴɴᴇʟ ʟɪɴᴋ ᴀᴄᴄᴇss</b></code>\n"
+                    "⚡ <i>ɪs ᴘʟᴀɴ ᴋᴏ ʙᴜʏ ᴋᴀʀɴᴇ ᴘᴀʀ ᴀᴀᴘᴋᴏ ᴅɪʀᴇᴄᴛ ᴠɪᴘ ᴄʜᴀɴɴᴇʟ ᴋɪ ʟɪɴᴋ ᴍɪʟᴇɢɪ.</i>"
+                )
 
             if data.get('demo_link'):
                 markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ (ᴛᴇᴀsᴇʀ)", url=data['demo_link']))
@@ -97,7 +103,6 @@ def start_handler(message):
 
 ⚡ ɪɴsᴛᴀɴᴛ ᴅᴇᴍᴏ | ᴀᴜᴛᴏ ᴘᴀʏᴍᴇɴᴛ | ᴀᴜᴛᴏ ᴅᴇʟɪᴠᴇʀʏ"""
 
-    # Admin aur User dono ke liye message design set kiya
     if user_id == config.ADMIN_ID:
         final_text = (
             f"{title}\n"
