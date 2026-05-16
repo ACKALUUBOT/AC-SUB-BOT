@@ -65,7 +65,7 @@ def start_handler(message):
 
     # ─── 2. MAIN DASHBOARD ───
     markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton("🛍️ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ sᴛᴏʀｅ 🛍️", callback_data="open_store"))
+    markup.add(InlineKeyboardButton("🛍️ ᴏᴘᴇɴ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀᴇ 🛍️", callback_data="open_store"))
     
     markup.add(
         InlineKeyboardButton("👤 ᴍʏ ᴅᴀsʜʙᴏᴀʀᴅ", callback_data="my_plan"),
@@ -76,24 +76,44 @@ def start_handler(message):
         markup.add(
             InlineKeyboardButton("➕ ᴀᴅᴅ sᴛᴏʀʏ", callback_data="admin_story"),
             InlineKeyboardButton("📺 ᴀᴅᴅ ᴄʜᴀɴɴᴇʟ", callback_data="admin_add"),
-            InlineKeyboardButton("🎁 ᴄʀᴇᴀᴛᴇ ᴄᴏᴍʙᴏ", callback_data="admin_combo") # NEW ADMIN BUTTON
+            InlineKeyboardButton("🎁 ᴄʀᴇᴀᴛᴇ ᴄᴏᴍʙᴏ", callback_data="admin_combo")
         )
         markup.add(
             InlineKeyboardButton("⚙️ ᴍᴀɴᴀɢᴇ ᴀʟʟ", callback_data="admin_channels"),
             InlineKeyboardButton("❌ ʀᴇᴍᴏᴠᴇ sᴜʙ", callback_data="admin_remove")
         )
 
-    title = "⚡ <b>ᴀᴅᴍɪɴ ᴍᴀsᴛᴇʀ ᴘᴀɴᴇʟ</b>" if user_id == config.ADMIN_ID else "✨ <b>ᴍᴇᴍʙᴇʀ ᴍᴀɪɴ ᴍᴇɴᴜ</b>"
-    desc = "Welcome Back, Boss! Complete system controls niche diye gaye hain." if user_id == config.ADMIN_ID else "👋 ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ᴏғғɪᴄɪᴀʟ sᴛᴏʀʏ sᴇʟʟᴇʀ ʙᴏᴛ! ᴛʜɪs ʙᴏᴛ sᴇʟʟs ᴀʟʟ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ ᴀɴᴅ ʟᴀᴛᴇsᴛ sᴛᴏʀɪᴇs ᴏғ ᴘᴏᴄᴋᴇᴛ ғᴍ ᴀɴᴅ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ. ʏᴏᴜ ᴄᴀɴ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴅᴇᴍᴏ ғɪʟᴇs ʜᴇʀᴇ ʙᴇғᴏʀᴇ ᴍᴀᴋɪɴɢ ᴀ ᴘᴜʀᴄʜᴀsᴇ!  👑 ʜᴏᴡ ᴛᴏ ʙᴜʏ:
-ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ ᴀɴʏ ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ, ᴘʟᴇᴀsᴇ ᴄʜᴇᴄᴋ ᴏᴜʀ sᴛᴏʀᴇ ʙʏ ᴄʟɪᴄᴋɪɴɢ ᴛʜᴇ ᴏᴘᴇɴ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀᴇ ʙᴜᴛᴛᴏɴ ɢɪᴠᴇɴ ʙᴇʟᴏᴡ. ⚡ ɪɴsᴛᴀɴᴛ ᴅᴇᴍᴏ | ᴀᴜᴛᴏ ᴘᴀʏᴍᴇɴᴛ | ᴀᴜᴛᴏ ᴅᴇʟɪᴠᴇʀʏ. 👨‍💻 ᴅᴇᴠᴇʟᴏᴘᴇʀ: @HDFILM0900_BOT"
+    title = "⚡ <b>ᴀᴅᴍɪɴ ᴍᴀsᴛᴇʀ ᴘᴀɴᴇʟ</b>" if user_id == config.ADMIN_ID else "╔════════════════════════════╗\n       ✨ sᴛᴏʀʏ x ᴅᴇᴍᴏ ✨\n╚════════════════════════════╝"
+    
+    if user_id == config.ADMIN_ID:
+        desc = "Welcome Back, Boss! Complete system controls niche diye gaye hain."
+    else:
+        desc = """ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ᴏғғɪᴄɪᴀʟ sᴛᴏʀʏ sᴇʟʟᴇʀ ʙᴏᴛ!
 
-    final_text = (
-        f"{title}\n"
-        f"──────────────────────────\n"
-        f"👋 Hello, <b>{message.from_user.first_name}</b>!\n\n"
-        f"➔ {desc}\n"
-        f"──────────────────────────"
-    )
+ᴛʜɪs ʙᴏᴛ sᴇʟʟs ᴀʟʟ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ ᴀɴᴅ ʟᴀᴛᴇsᴛ sᴛᴏʀɪᴇs ᴏғ ᴘᴏᴄᴋᴇᴛ ғᴍ ᴀɴᴅ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ. ʏᴏᴜ ᴄᴀɴ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴅᴇᴍᴏ ғɪʟᴇs ʜᴇʀᴇ ʙᴇғᴏʀᴇ ᴍᴀᴋɪɴɢ ᴀ ᴘᴜʀᴄʜᴀsᴇ!
+
+👑 ʜᴏᴡ ᴛᴏ ʙᴜʏ:
+ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ ᴀɴʏ ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ, ᴘʟᴇᴀsᴇ ᴄʜᴇᴄᴋ ᴏᴜʀ sᴛᴏʀᴇ ʙʏ ᴄʟɪᴄᴋɪɴɢ ᴛʜᴇ ᴏᴘᴇɴ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀᴇ ʙᴜᴛᴛᴏɴ ɢɪᴠᴇɴ ʙᴇʟᴏᴡ.
+
+⚡ ɪɴsᴛᴀɴᴛ ᴅᴇᴍᴏ | ᴀᴜᴛᴏ ᴘᴀʏᴍᴇɴᴛ | ᴀᴜᴛᴏ ᴅᴇʟɪᴠᴇʀʏ"""
+
+    # Admin aur User dono ke liye message design set kiya
+    if user_id == config.ADMIN_ID:
+        final_text = (
+            f"{title}\n"
+            f"──────────────────────────\n"
+            f"👋 Hello, <b>{message.from_user.first_name}</b>!\n\n"
+            f"➔ {desc}\n"
+            f"──────────────────────────"
+        )
+    else:
+        final_text = (
+            f"{title}\n\n"
+            f"{desc}\n"
+            f"──────────────────────────\n"
+            f"👨‍💻 ᴅᴇᴠᴇʟᴏᴘᴇʀ: @HDFILM0900_BOT"
+        )
+        
     bot.send_message(message.chat.id, final_text, reply_markup=markup, parse_mode="HTML")
 
 
@@ -116,7 +136,7 @@ def open_store_callback(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("view_cat_"))
 def view_category_updates(call):
     bot.answer_callback_query(call.id)
-    category_type = call.data.split("_")[2] # 'story', 'channel' ya 'combo'
+    category_type = call.data.split("_")[2]
     
     bot_username = bot.get_me().username
     markup = get_items_by_category_markup(category_type, bot_username)
