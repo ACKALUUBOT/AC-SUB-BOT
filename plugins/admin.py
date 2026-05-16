@@ -223,3 +223,86 @@ def finalize_story_setup(message, story_name, price, final_link, file_id):
     })
     link = f"https://t.me/{bot.get_me().username}?start={item_id}"
     bot.send_message(message.chat.id, f"✅ <b>sᴛᴏʀʏ sᴇᴛᴜᴘ ғɪɴɪsʜᴇᴅ!</b>\n\nLink: <code>{link}</code>", parse_mode="HTML")
+
+
+
+@bot.message_handler(commands=['add_combo'])
+def add_combo_manual_handler(message):
+    # Safety Check: Sirf admin hi use kar sake
+    if message.from_user.id != config.ADMIN_ID:
+        return bot.reply_to(message, "❌ Aapke paas is command ka access nahi hai.")
+
+    # Command ka text nikaalo
+    command_text = message.text.replace("/add_combo", "").strip()
+    
+    if not command_text or "|" not in command_text:
+        error_msg = (
+            "💡 <b>ʜᴏᴡ ᴛᴏ ᴀᴅᴅ ᴄᴏᴍʙᴏ ᴍᴀɴᴜᴀʟʟʏ:</b>\n\n"
+            "Format mein <code>|</code> (pipe symbol) ka use karein:\n"
+            "<code>/add_combo Price | Name | Description | IDs</code>\n\n"
+            "📝 <b>Example:</b>\n"
+            "<code>/add_combo 99 | Mega 3-in-1 Pack | 1. Hot Story\n2. VIP Video\n3. Backup Link | -1001111111, -1002222222</code>\n\n"
+            "⚠️ <i>Note: Channel IDs ke beech mein comma (,) lagayein.</i>"
+        )
+        return bot.reply_to(message, error_msg, parse_mode="HTML")
+
+    try:
+        # Data ko split karo pipe (|) ke hissaab se
+        parts = [p.strip() for p in command_text.split("|")]
+        
+        if len(parts) < 4:
+            return bot.reply_to(message, "❌ <b>Format Error!</b> Kripya saari fields (Price, Name, Description, IDs) sahi se bharein.")
+
+        price = parts[0]
+        combo_name = parts[1]
+        description = parts[2]
+        
+        # Channel IDs ko list me convert karo aur string se integer banao
+        raw_ids = parts[3].split(",")
+        channels_list = []
+        for cid in raw_ids:
+            cid = cid.strip()
+            if cid.replace('-', '').isdigit():
+                channels_list.append(int(cid))
+
+        if not channels_list:
+            return bot.reply_to(message, "❌ Kripya valid Channel IDs daalein (Jaise: -100xxxxxx).")
+
+        # Unique String Item ID generate karo deep-linking ke liye
+        unique_item_id = f"combo_{uuid.uuid4().hex[:6]}"
+
+        # Database document taiyar karo
+        combo_data = {
+            "item_id": unique_item_id,
+            "combo_name": combo_name,
+            "price": price,
+            "description": description,
+            "channels_list": channels_list,
+            "is_combo": True # Isse store automatically catch karega
+        }
+
+        # MongoDB me save karo
+        channels_col.insert_one(combo_data)
+
+        success_text = (
+            "✅ <b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋ ᴀᴅᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!</b>\n"
+            "──────────────────────────\n"
+            "📦 <b>Name:</b> <code>{name}</code>\n"
+            "💰 <b>Price:</b> ₹{price}\n"
+            "🆔 <b>Item ID:</b> <code>{item_id}</code>\n"
+            "📺 <b>Linked Channels:</b> <code>{ch_count} Channels</code>\n"
+            "──────────────────────────\n"
+            "🔗 <b>Direct Link:</b> <code>https://t.me/{bot_link}?start={item_id}</code>"
+        ).format(
+            name=combo_name,
+            price=price,
+            item_id=unique_item_id,
+            ch_count=len(channels_list),
+            bot_link=bot.get_me().username
+        )
+
+        bot.reply_to(message, success_text, parse_mode="HTML")
+
+    except Exception as e:
+        bot.reply_to(message, f"❌ <b>Error Occurred:</b> <code>{str(e)}</code>")
+        
