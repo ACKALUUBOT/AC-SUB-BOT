@@ -110,7 +110,7 @@ def store_navigation_text_handler(message):
     text = message.text
 
     if text == "🚫 STORE IS EMPTY":
-        return bot.send_message(message.chat.id, "⚠️ **Abhi is category me koi files available nahi hain.** Kripya dusri category check karein.")
+        return bot.send_message(message.chat.id, "<blockquote>⚠️ ** ❌ NO STORY AVAILABLE.</blockquote>")
 
     if text == "❌ CLOSE STORE":
         return bot.send_message(
