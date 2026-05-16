@@ -5,7 +5,7 @@ from database import channels_col, users_col
 import config
 import time
 
-# --- 1. PAYMENT SELECTION ---
+# --- 1. PAYMENT SELECTION (FIXED FOR PHOTO SUPPORT) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('select_'))
 def confirm_step(call):
     parts = call.data.split('_')
@@ -14,7 +14,8 @@ def confirm_step(call):
     data = channels_col.find_one({"item_id": item_id}) or \
            channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
     
-    if not data: return bot.answer_callback_query(call.id, "❌ Data not found!")
+    if not data: 
+        return bot.answer_callback_query(call.id, "❌ Data not found!")
 
     price = data['price'] if 'story_name' in data else data['plans'].get(mins, "0")
     display_name = data.get('story_name') or data.get('name')
@@ -32,7 +33,16 @@ def confirm_step(call):
         f"💰 ᴀᴍᴏᴜɴᴛ: <b>₹{price}</b>\n\n"
         f"➔ Payment method select karein:"
     )
-    bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+    
+    # ─── FIX: Purane message (Photo ya Text) ko pehle delete karein ───
+    try:
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    except Exception as e:
+        print(f"Delete Error in confirm_step: {e}")
+
+    # ─── FIX: Naya dynamic confirmation text fresh send karein ───
+    bot.send_message(call.message.chat.id, text, reply_markup=markup, parse_mode="HTML")
+
 
 # --- 2. MANUAL PAYMENT (QR & UPI) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('man_'))
@@ -48,16 +58,28 @@ def manual_pay(call):
     markup = InlineKeyboardMarkup().add(InlineKeyboardButton("✅ sᴜʙᴍɪᴛ sᴄʀᴇᴇɴsʜᴏᴛ", callback_data=f"paid_{item_id}_{mins}"))
 
     if mode == "qr":
-        bot.delete_message(call.message.chat.id, call.message.message_id)
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except:
+            pass
         bot.send_photo(call.message.chat.id, qr_url, caption=f"📥 <b>ǫʀ sᴄᴀɴɴᴇʀ</b>\n\nAmount: <b>₹{price}</b>\n\n➔ Pay karke niche wala button dabayein.", reply_markup=markup, parse_mode="HTML")
     else:
+        # UPI case me hum normal edit rakh sakte hain kyunki confirm_step se humne ab normal text bana diya hai
         bot.edit_message_text(f"📲 <b>ᴜᴘɪ ɪᴅ:</b> <code>{config.UPI_ID}</code>\nAmount: <b>₹{price}</b>\n\n➔ Pay karne ke baad niche button dabayein.", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+
 
 # --- 3. DIRECT SCREENSHOT SUBMISSION (No UTR) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('paid_'))
 def handle_paid(call):
     _, item_id, mins = call.data.split('_')
     bot.answer_callback_query(call.id)
+    
+    # User experience ko clean rakhne ke liye screenshot mangne se pehle QR/UPI text hatayenge
+    try:
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    except:
+        pass
+        
     msg = bot.send_message(call.message.chat.id, "📸 Payment ka <b>Screenshot</b> bhejein:")
     bot.register_next_step_handler(msg, send_request_to_admin, item_id, mins)
 
@@ -74,7 +96,6 @@ def send_request_to_admin(message, item_id, mins):
     display_name = data.get('story_name') or data.get('name')
     bot.send_message(message.chat.id, "⏳ <b>ʀᴇǫᴜᴇsᴛ sᴇɴᴛ!</b>\nAdmin check karke aapka access on kar dega.")
     
-    # Admin Buttons (UTR part removed from callback)
     markup = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("✅ Approve", callback_data=f"app_{message.from_user.id}_{item_id}_{mins}"),
         InlineKeyboardButton("❌ Reject", callback_data=f"rej_{message.from_user.id}"),
@@ -84,10 +105,10 @@ def send_request_to_admin(message, item_id, mins):
     admin_text = f"📥 <b>ɴᴇᴡ ᴘᴀʏᴍᴇɴᴛ ʀᴇǫᴜᴇsᴛ</b>\n────────────────────\n👤 User ID: <code>{message.from_user.id}</code>\n📦 Item: <b>{display_name}</b>\n⏳ Plan: {mins if mins != 'manual' else 'Lifetime'}"
     bot.send_photo(config.ADMIN_ID, photo_id, caption=admin_text, reply_markup=markup, parse_mode="HTML")
 
+
 # --- 4. ADMIN APPROVAL ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('app_'))
 def admin_approve(call):
-    # Format: app_userid_itemid_mins
     _, u_id, item_id, mins = call.data.split('_')
     
     data = channels_col.find_one({"item_id": item_id}) or \
@@ -95,7 +116,6 @@ def admin_approve(call):
     
     if not data: return
     
-    # Expiry Logic
     expiry = int(time.time()) + (int(mins) * 60) if mins != 'manual' else int(time.time()) + (365*24*60*60)
     users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
 
@@ -105,7 +125,8 @@ def admin_approve(call):
             invite = bot.create_chat_invite_link(data['channel_id'], member_limit=1)
             markup.add(InlineKeyboardButton("📢 Join Channel", url=invite.invite_link))
             msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\nChannel join karne ke liye niche click karein:"
-        except: msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\nAdmin se link maangein."
+        except: 
+            msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\nAdmin se link maangein."
     else:
         markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀʏ", url=data['bot_link']))
         msg = f"✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nStory: <b>{data['story_name']}</b>\nNiche button se access karein:"
