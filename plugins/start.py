@@ -11,7 +11,6 @@ from main import USER_STATES
 
 @bot.message_handler(commands=['start'])
 def start_handler(message):
-    # Callback query aur normal message dono ke liye ID extract karne ka solid system
     if hasattr(message, 'from_user') and message.from_user:
         user_id = message.from_user.id
     else:
@@ -24,7 +23,7 @@ def start_handler(message):
 
     USER_STATES[user_id] = {"category": "home", "page": 1}
 
-    # ─── 1. DEEP LINK PARAMETER CHECK ───
+    # ─── 1. DEEP LINK PARAMETER CHECK (UPDATED FOR DIRECT STORY) ───
     text = message.text.split() if hasattr(message, 'text') and message.text else []
     if len(text) > 1:
         param = text[1]
@@ -35,16 +34,26 @@ def start_handler(message):
             markup = InlineKeyboardMarkup(row_width=1)
             db_id = data.get('item_id') or data.get('channel_id')
             
+            # Condition A: Combo Pack
             if data.get('is_combo'):
                 markup.add(InlineKeyboardButton(f"💳 🎁 ᴜɴʟᴏᴄᴋ ᴄᴏᴍʙᴏ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
                 display_name = data['combo_name']
                 header = "🎁 <b>ᴘʀᴇᴍɪᴜᴍ sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ʙᴜɴᴅʟᴇ</b>"
                 desc_text = f"📝 <b>ɪɴᴄʟᴜᴅᴇᴅ sᴛᴏʀɪᴇs:</b>\n<i>{data.get('description', 'Multiple premium stories inside!')}</i>"
+            
+            # Condition B: Direct Story (Admin ke /add ya /add_story command se bani hui)
+            elif data.get('story_name') and not data.get('is_combo'):
+                markup.add(InlineKeyboardButton(f"💳 🎧 ᴜɴʟᴏᴄᴋ sᴛᴏʀʏ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
+                display_name = data.get('story_name')
+                header = f"🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ ({data.get('source', 'Audio')})</b>"
+                desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ɪɴsᴛᴀɴᴛ ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
+            
+            # Condition C: Normal Forwarded Channel
             else:
-                markup.add(InlineKeyboardButton(f"💳 ⚡ ᴜɴʟᴏᴄᴋ sᴛᴏʀʏ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
-                display_name = data.get('story_name', 'Premium Story')
-                header = "🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ</b>"
-                desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
+                markup.add(InlineKeyboardButton(f"💳 ⚡ ᴜɴʟᴏᴄᴋ ᴄʜᴀɴɴᴇʟ - ₹{data.get('price', 'Premium')}", callback_data=f"select_{db_id}_manual"))
+                display_name = data.get('name', 'Premium Channel')
+                header = "📢 <b>ᴘʀᴇᴍɪᴜᴍ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀɴɴᴇʟ</b>"
+                desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ᴄʜᴀɴɴᴇʟ ɪɴᴠɪᴛᴇ ʟɪɴᴋ</code>"
 
             if data.get('demo_link'):
                 markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ (ᴛᴇᴀsᴇʀ)", url=data['demo_link']))
@@ -67,7 +76,6 @@ def start_handler(message):
         InlineKeyboardButton("📞 🌟 ʟɪᴠᴇ sᴜᴘᴘᴏʀᴛ", url=f"https://t.me/{config.CONTACT_USERNAME}")
     )
 
-    # 🔥 ADMIN EXCLUSIVE DASHBOARD PANEL 🔥
     if user_id == config.ADMIN_ID:
         markup.add(
             InlineKeyboardButton("➕ ᴀᴅᴅ sᴛᴏʀʏ", callback_data="admin_story"),
@@ -84,12 +92,12 @@ def start_handler(message):
 
 ᴛʜɪs ʙᴏᴛ sᴇʟʟs ᴀʟʟ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ ᴀɴ ʟᴀᴛᴇsᴛ sᴛᴏʀɪᴇs ᴏғ ᴘᴏᴄᴋᴇᴛ ғᴍ ᴀɴᴅ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ. ʏᴏᴜ ᴄᴀɴ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴅᴇᴍᴏ ғɪʟᴇs ʜᴇʀᴇ ʙᴇғᴏʀᴇ ᴍᴀᴋɪɴɢ ᴀ ᴘᴜʀᴄʜᴀsᴇ!
 
-⚡ ɪɴsᴛᴀɴᴛ ᴅᴇᴍᴏ | ᴀᴜᴛᴏ ᴘᴀʏᴍᴇɴᴛ | ᴀᴜᴛᴏ ᴅᴇʟɪᴠᴇʀʏ"""
+⚡ ɪɴsᴛᴀɴᴛ ᴅᴇᴍᴏ | ᴀᴜᴛᴏ ᴘᴀ PAYᴍᴇɴᴛ | ᴀᴜᴛᴏ ᴅᴇʟɪᴠᴇʀʏ"""
 
     bot.send_message(chat_id, f"{title}\n\n{desc}", reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 3. TEXT NAVIGATION HANDLERS (UPDATED ROUTES) ───
+# ─── 3. TEXT NAVIGATION HANDLERS ───
 @bot.message_handler(func=lambda msg: msg.text in [
     "✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs", 
     "🔥 ᴘᴏᴄᴋᴇᴛ ғᴍ sᴛᴏʀɪᴇs", 
@@ -122,7 +130,6 @@ def store_navigation_text_handler(message):
         USER_STATES[user_id] = {"category": "home", "page": 1}
         return bot.send_message(message.chat.id, get_store_text(), reply_markup=get_categories_markup(), parse_mode="HTML")
 
-    # 🌟 NEW CATEGORY ROUTING LOGIC
     if text == "✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs":
         USER_STATES[user_id] = {"category": "pratilipi", "page": 1}
         cat_title, c_type = "🎬 <b>ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs</b>", "pratilipi"
@@ -152,13 +159,12 @@ def store_pagination_handler(message):
     bot.send_message(message.chat.id, f"<b>AVAILABLE STORIES — {state['category'].upper()}</b>\n`PAGE {state['page']}`\n──────────────────────────", reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 5. STORY CLICK ROUTER ───
+# ─── 5. STORY CLICK ROUTER (Teesra Button Flow Added) ───
 @bot.message_handler(func=lambda msg: any(char in msg.text for char in ['[ ₹', '➔ [']))
 def item_selection_handler(message):
     input_text = message.text
     clean_name = input_text
     
-    # Text clean karne ka filter
     if "." in input_text:
         clean_name = input_text.split(".", 1)[1].split("[")[0].strip()
     elif "🎁" in input_text:
@@ -166,9 +172,13 @@ def item_selection_handler(message):
 
     state = USER_STATES.get(message.from_user.id, {"category": "pratilipi"})
     
-    # Current category state ke hisab se data select hoga
+    # Category filter query
     if state["category"] == "combo":
         data = channels_col.find_one({"combo_name": clean_name})
+    elif state["category"] == "pocket":
+        data = channels_col.find_one({"story_name": clean_name, "source": "Pocket"})
+    elif state["category"] == "pratilipi":
+        data = channels_col.find_one({"story_name": clean_name, "source": "Pratilipi"})
     else:
         data = channels_col.find_one({"story_name": clean_name})
 
@@ -179,19 +189,29 @@ def item_selection_handler(message):
     inline_markup = InlineKeyboardMarkup(row_width=1)
     db_id = data.get('item_id') or data.get('channel_id')
 
-    inline_markup.add(InlineKeyboardButton(f"✅ CONFIRM & PAY - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
+    # --- 🌟 TEESRA FLOW SELECTION BUTTON 🌟 ---
+    if data.get('is_combo'):
+        # 1st Button Type: Combo Packs ke liye
+        inline_markup.add(InlineKeyboardButton(f"✅ CONFIRM & PAY COMBO - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
+        header, item_label = "🎁 <b>ᴘʀᴇᴍɪᴜᴍ sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ʙᴜɴᴅʟᴇ</b>", data.get('combo_name')
+        desc_text = f"📝 <b>ɪɴᴄʟᴜᴅᴇᴅ sᴛᴏʀɪᴇs:</b>\n<i>{data.get('description', 'Multiple bundles inside!')}</i>"
+        
+    elif data.get('story_name') and not data.get('is_combo'):
+        # 2nd Button Type: Direct Story /add se add ki hui stories ke liye (Jo aap chahte the!)
+        inline_markup.add(InlineKeyboardButton(f"💳 UNLOCK PREMIUM STORY - ₹{data.get('price', data.get('plans'))}", callback_data=f"select_{db_id}_manual"))
+        header, item_label = f"🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ ({data.get('source', 'Audio')})</b>", data.get('story_name')
+        desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ɪɴsᴛᴀɴᴛ ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
+        
+    else:
+        # 3rd Button Type: Normal forwarded channels ke liye
+        inline_markup.add(InlineKeyboardButton(f"✅ CONFIRM & PAY - ₹{data.get('price', data.get('plans'))}", callback_data=f"select_{db_id}_manual"))
+        header, item_label = "📢 <b>ᴘʀᴇᴍɪᴜᴍ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀɴɴᴇʟ</b>", data.get('name')
+        desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ᴄʜᴀɴɴᴇʟ ɪɴᴠɪᴛᴇ ʟɪɴᴋ</code>"
 
     if data.get('demo_link'):
         inline_markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ (ᴛᴇᴀsᴇʀ)", url=data['demo_link']))
     
     inline_markup.add(InlineKeyboardButton("⬅️ BACK TO LIST", callback_data="return_to_list_True"))
-
-    if data.get('is_combo'):
-        header, item_label = "🎁 <b>ᴘʀᴇᴍɪᴜᴍ sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ʙᴜɴᴅʟᴇ</b>", data.get('combo_name')
-        desc_text = f"📝 <b>ɪɴᴄʟᴜᴅᴇᴅ sᴛᴏʀɪᴇs:</b>\n<i>{data.get('description', 'Multiple bundles inside!')}</i>"
-    else:
-        header, item_label = "🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ</b>", data.get('story_name')
-        desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
 
     details_text = f"{header}\n──────────────────────────\n📦 <b>ɪᴛᴇᴍ:</b> <code>{item_label}</code>\n\n{desc_text}\n──────────────────────────"
     
