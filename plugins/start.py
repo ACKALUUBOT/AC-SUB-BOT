@@ -115,7 +115,7 @@ def store_navigation_text_handler(message):
     if text == "❌ CLOSE STORE":
         return bot.send_message(
             message.chat.id, 
-            "✖️ <b>sᴛᴏʀᴇ ᴄʟᴏsᴇᴅ!</b>\n\nAapka store panel close kar diya gaya hai aur normal keyboard active hai.", 
+            "✖️ <b>sᴛᴏʀᴇ ᴄʟᴏsᴇᴅ!</b>.", 
             reply_markup=ReplyKeyboardRemove(), 
             parse_mode="HTML"
         )
