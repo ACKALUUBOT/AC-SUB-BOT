@@ -4,12 +4,12 @@ import config
 from utils import bot
 from server import app
 from scheduler import start_scheduler
-import broadcast
 
 # Plugins folder ke handlers register karne ke liye explicitly import karein
 import plugins.start
 import plugins.admin
 import plugins.payment
+import plugins.broadcast
 
 if __name__ == '__main__':
     try:
