@@ -55,7 +55,7 @@ def get_final_link(message, story_name, demo, file_id):
     msg = bot.send_message(message.chat.id, "💰 <b><b>ᴘʀɪᴄᴇ:</b></b>\nSirf number likhein (Example: 49):")
     bot.register_next_step_handler(msg, ask_category, story_name, demo, final_link, file_id)
 
-# NAYA STEP: Price lene ke baad platform poochne ke liye inline buttons
+# Price lene ke baad platform poochne ke liye inline buttons (Short Names ke sath)
 def ask_category(message, story_name, demo, final_link, file_id):
     if not message.text or not message.text.isdigit():
         msg = bot.send_message(message.chat.id, "❌ Price sirf number mein likhein:")
@@ -63,10 +63,9 @@ def ask_category(message, story_name, demo, final_link, file_id):
         return
 
     price = message.text
-    story_id = str(uuid.uuid4())[:10] # Unique ID pehle hi generate kar li taaki callback me bhej sakein
+    story_id = str(uuid.uuid4())[:10] 
 
-    # Hum saare data ko database me temporary ('pending') flag ke sath save kar rahe hain
-    # Taaki jab admin button dabaye, toh data loss na ho aur seedhe update ho jaye.
+    # Database me temporary save
     channels_col.insert_one({
         "item_id": story_id,
         "story_name": story_name,
@@ -75,38 +74,38 @@ def ask_category(message, story_name, demo, final_link, file_id):
         "price": price,
         "file_id": file_id, 
         "type": "story",
-        "status": "pending" # Temporary status
+        "status": "pending" 
     })
 
-    # Keyboard buttons for platform selection
+    # Keyboard buttons par ab sirf "Pocket" aur "Pratilipi" dikhega
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("🎧 Pocket FM", callback_data=f"src_pocket_{story_id}"),
-        InlineKeyboardButton("📚 Pratilipi FM", callback_data=f"src_pratilipi_{story_id}")
+        InlineKeyboardButton("🎧 Pocket", callback_data=f"src_pocket_{story_id}"),
+        InlineKeyboardButton("📚 Pratilipi", callback_data=f"src_pratilipi_{story_id}")
     )
 
     bot.send_message(
         message.chat.id, 
-        "📂 <b>ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:</b>\nYeh story kis platform ki hai?", 
+        "📂 <b>ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:</b>\nYeh story kiski hai?", 
         reply_markup=markup, 
         parse_mode="HTML"
     )
 
-# NAYA HANDLER: Button press hone par data update karne aur link dene ke liye
+# Button press hone par short name save hoga
 @bot.callback_query_handler(func=lambda call: call.data.startswith('src_'))
 def save_story_with_source(call):
     if call.from_user.id != config.ADMIN_ID:
         return bot.answer_callback_query(call.id, "Unauthorized!")
 
-    # Callback data se platform aur story_id nikalna
     parts = call.data.split('_')
-    platform = "Pocket FM" if parts[1] == "pocket" else "Pratilipi FM"
+    # Yahan humne badal kar sirf "Pocket" aur "Pratilipi" kar diya hai
+    platform = "Pocket" if parts[1] == "pocket" else "Pratilipi"
     story_id = parts[2]
 
-    # Database me pending story ko search karke update karna
+    # Database document update
     story_data = channels_col.find_one_and_update(
         {"item_id": story_id, "status": "pending"},
-        {"$set": {"source": platform}, "$unset": {"status": ""}}, # source set kiya aur pending flag hata diya
+        {"$set": {"source": platform}, "$unset": {"status": ""}}, 
         return_document=True
     )
 
