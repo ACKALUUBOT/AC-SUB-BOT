@@ -5,7 +5,6 @@ from database import channels_col, users_col
 import config
 
 # Global storage temporary data hold karne ke liye jab tak category select na ho
-# (Kyunki callback_data ki limit 64 bytes hoti hai, isliye bada data yahan safe rahega)
 pending_setups = {}
 
 def get_chat_id(message):
@@ -178,7 +177,6 @@ def channel_ask_demo(message, ch_id, ch_name, plans_data):
     msg = bot.send_message(message.chat.id, "🔗 Demo Link bhejein (Ya 'skip' ya 'none' likhein):")
     bot.register_next_step_handler(msg, channel_ask_source, ch_id, ch_name, plans_data, file_id)
 
-# NEW STEP FOR FLOW 1: Channel ke liye source puchna
 def channel_ask_source(message, ch_id, ch_name, plans_data, file_id):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
     demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
@@ -189,10 +187,11 @@ def channel_ask_source(message, ch_id, ch_name, plans_data, file_id):
         "plans_data": plans_data, "file_id": file_id, "demo": demo
     }
     
+    # Short names wale inline buttons
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("🎧 Pocket FM", callback_data=f"setsrc_pocket_{state_id}"),
-        InlineKeyboardButton("📚 Pratilipi FM", callback_data=f"setsrc_pratilipi_{state_id}")
+        InlineKeyboardButton("🎧 Pocket", callback_data=f"setsrc_pocket_{state_id}"),
+        InlineKeyboardButton("📚 Pratilipi", callback_data=f"setsrc_pratilipi_{state_id}")
     )
     bot.send_message(message.chat.id, "📂 <b>ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:</b>\nYeh Channel kis platform ka hai?", reply_markup=markup, parse_mode="HTML")
 
@@ -216,7 +215,6 @@ def story_ask_demo(message, story_name, price, file_id):
     msg = bot.send_message(message.chat.id, "🔗 Demo Link bhejein (Ya 'skip' ya 'none' likhein):")
     bot.register_next_step_handler(msg, story_ask_source, story_name, price, final_link, file_id)
 
-# NEW STEP FOR FLOW 2: Direct photo ke liye source puchna
 def story_ask_source(message, story_name, price, final_link, file_id):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
     demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
@@ -227,12 +225,13 @@ def story_ask_source(message, story_name, price, final_link, file_id):
         "final_link": final_link, "file_id": file_id, "demo": demo
     }
     
+    # Short names wale inline buttons
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("🎧 Pocket FM", callback_data=f"setsrc_pocket_{state_id}"),
-        InlineKeyboardButton("📚 Pratilipi FM", callback_data=f"setsrc_pratilipi_{state_id}")
+        InlineKeyboardButton("🎧 Pocket", callback_data=f"setsrc_pocket_{state_id}"),
+        InlineKeyboardButton("📚 Pratilipi", callback_data=f"setsrc_pratilipi_{state_id}")
     )
-    bot.send_message(message.chat.id, "📂 <b>ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:</b>\nYeh Story kis platform ki hai?", reply_markup=markup, parse_mode="HTML")
+    bot.send_message(message.chat.id, "📂 <b>ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:</b>\nYeh Story kiski hai?", reply_markup=markup, parse_mode="HTML")
 
 
 # ==========================================
@@ -243,7 +242,8 @@ def handle_universal_source(call):
     if call.from_user.id != config.ADMIN_ID: return
     
     parts = call.data.split('_')
-    platform = "Pocket FM" if parts[1] == "pocket" else "Pratilipi FM"
+    # Badlaav: Ab directly sirf "Pocket" ya "Pratilipi" string store hogi
+    platform = "Pocket" if parts[1] == "pocket" else "Pratilipi"
     state_id = parts[2]
     
     data = pending_setups.get(state_id)
@@ -274,7 +274,7 @@ def handle_universal_source(call):
                 "plans": plans, 
                 "demo_link": data["demo"], 
                 "file_id": data["file_id"],
-                "source": platform, # Saved
+                "source": platform, 
                 "type": "channel"
             }}, 
             upsert=True
@@ -288,19 +288,18 @@ def handle_universal_source(call):
             "channel_id": fake_channel_id,
             "story_name": data["story_name"],
             "price": data["price"],
-            "source": platform, # Saved
+            "source": platform, 
             "bot_link": data["final_link"], 
             "demo_link": data["demo"],
             "file_id": data["file_id"],
             "type": "channel"
         })
 
-    # Clean temporary storage
     pending_setups.pop(state_id, None)
     
     link = f"https://t.me/{bot.get_me().username}?start={item_id}"
     bot.send_message(
         call.message.chat.id, 
-        f"✅ <b>sᴇᴛsetup ғɪɴɪsʜᴇᴅ!</b>\n\n📂 <b>Platform:</b> {platform}\n🔗 <b>Link:</b> <code>{link}</code>", 
+        f"✅ <b>sᴛᴏʀʏ sᴇᴛᴜᴘ ғɪɴɪsʜᴇᴅ!</b>\n\n📂 <b>Platform:</b> {platform}\n🔗 <b>Link:</b> <code>{link}</code>", 
         parse_mode="HTML"
     )
