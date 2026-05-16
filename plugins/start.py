@@ -9,8 +9,8 @@ import config
 # Naye functions jo humne store.py me dale hain unhe import kiya
 from plugins.store import get_categories_markup, get_items_by_category_markup, get_store_text
 
-# ─── USER STATE TRACKER (Pagination aur Category Yaad Rakhne Ke Liye) ───
-USER_STATES = {}  # Format: {user_id: {"category": "story", "page": 1}}
+# Global state system ko sync kiya (main.py se connected rahega)
+from main import USER_STATES
 
 @bot.message_handler(commands=['start'])
 def start_handler(message):
@@ -58,7 +58,6 @@ def start_handler(message):
             if data.get('demo_link'):
                 markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ (ᴛᴇᴀsᴇʀ)", url=data['demo_link']))
             
-            # Deep link se bhi main menu jaane ke liye button ko normal inline rakha
             markup.add(InlineKeyboardButton("🏠 ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
 
             premium_text = (
@@ -69,7 +68,6 @@ def start_handler(message):
                 f"──────────────────────────"
             )
             
-            # Agar purana keyboard screen par hai toh clear bhej sakte hain
             photo_id = data.get('file_id')
             if photo_id:
                 return bot.send_photo(message.chat.id, photo=photo_id, caption=premium_text, reply_markup=markup, parse_mode="HTML")
@@ -101,19 +99,40 @@ def start_handler(message):
     if user_id == config.ADMIN_ID:
         desc = "Welcome Back, Boss! Complete system controls niche diye gaye hain."
     else:
-        desc = """...""" # Aapka purana default text block yahan chalega
+        desc = """ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ᴏғғɪᴄɪᴀʟ sᴛᴏʀʏ sᴇʟʟᴇʀ ʙᴏᴛ!
 
-    final_text = f"{title}\n\n{desc}" if user_id != config.ADMIN_ID else f"{title}\n──────────────────────────\n👋 Hello..."
-    
-    # Normal start hone par default text keyboard delete karke bhejte hain taaki clash na ho
+ᴛʜɪs ʙᴏᴛ sᴇʟʟs ᴀʟʟ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ ᴀɴ ʟᴀᴛᴇsᴛ sᴛᴏʀɪᴇs ᴏғ ᴘᴏᴄᴋᴇᴛ ғᴍ ᴀɴᴅ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ. ʏᴏᴜ ᴄᴀɴ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴅᴇᴍᴏ ғɪʟᴇs ʜᴇʀᴇ ʙᴇғᴏʀᴇ ᴍᴀᴋɪɴɢ ᴀ ᴘᴜʀᴄʜᴀsᴇ!
+
+👑 ʜᴏᴡ ᴛᴏ ʙᴜʏ:
+ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ ᴀɴʏ ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ, ᴘʟᴇᴀsᴇ ᴄʜᴇᴄᴋ ᴏᴜʀ sᴛᴏʀᴇ ʙʏ ᴄʟɪᴄᴋɪɴɢ ᴛʜᴇ ᴏᴘᴇɴ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀᴇ ʙᴜᴛᴛᴏɴ ɢɪᴠᴇɴ ʙᴇʟᴏᴡ.
+
+⚡ ɪɴsᴛᴀɴᴛ ᴅᴇᴍᴏ | ᴀᴜᴛᴏ ᴘᴀʏᴍᴇɴᴛ | ᴀᴜᴛᴏ ᴅᴇʟɪᴠᴇʀʏ"""
+
+    if user_id == config.ADMIN_ID:
+        final_text = (
+            f"{title}\n"
+            f"──────────────────────────\n"
+            f"👋 Hello, <b>{message.from_user.first_name}</b>!\n\n"
+            f"➔ {desc}\n"
+            f"──────────────────────────"
+        )
+    else:
+        final_text = (
+            f"{title}\n\n"
+            f"{desc}\n"
+            f"──────────────────────────\n"
+            f"👨‍💻 ᴅᴇᴠᴇʟᴏᴘᴇʀ: @HDFILM0900_BOT"
+        )
+        
+    # FIX: Main Dashboard bhejte waqt default normal keyboard enforce karne ke liye ReplyKeyboardRemove pass kiya hai
     bot.send_message(message.chat.id, final_text, reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 3. TEXT NAVIGATION HANDLERS (VIDEO LOGIC IMPLEMENTATION) ───
+# ─── 3. TEXT NAVIGATION HANDLERS ───
 
 @bot.message_handler(func=lambda msg: msg.text in [
-    "🔥 SINGLE STORIES (LATEST)", 
-    "👑 VIP CHANNEL ACCESS", 
+    "✨ ᴘʀᴀᴛɪʟipi ғᴍ sᴛᴏʀɪᴇs (ʙᴏᴛ ʟɪɴᴋ)", 
+    "📢 ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ ᴄʜᴀɴɴᴇʟ (ᴠɪᴘ)", 
     "🎁 SPECIAL COMBO PACKS (BIG SAVE)",
     "🔙 BACK TO CATEGORIES",
     "« BACK TO MENU"
@@ -122,7 +141,9 @@ def store_navigation_text_handler(message):
     user_id = message.from_user.id
     text = message.text
 
+    # FIX: Back to Menu dabate hi Custom Custom Keyboard destroy hoga aur system normal default keyboard active hoga
     if text == "« BACK TO MENU":
+        bot.send_message(message.chat.id, "⬅️ <i>Returning to Main Dashboard...</i>", reply_markup=ReplyKeyboardRemove())
         return start_handler(message)
 
     if text == "🔙 BACK TO CATEGORIES":
@@ -130,11 +151,10 @@ def store_navigation_text_handler(message):
         markup = get_categories_markup()
         return bot.send_message(message.chat.id, get_store_text(), reply_markup=markup, parse_mode="HTML")
 
-    # State update and setup
-    if text == "🔥 SINGLE STORIES (LATEST)":
+    if text == "✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs (ʙᴏᴛ ʟɪɴᴋ)":
         USER_STATES[user_id] = {"category": "story", "page": 1}
         cat_title, c_type = "🎬 <b>sɪɴɢʟᴇ sᴛᴏʀɪᴇs ʟɪsᴛ</b>", "story"
-    elif text == "👑 VIP CHANNEL ACCESS":
+    elif text == "📢 ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ ᴄʜᴀɴɴᴇʟ (ᴠɪᴘ)":
         USER_STATES[user_id] = {"category": "channel", "page": 1}
         cat_title, c_type = "💎 <b>ᴠɪᴘ ᴄʜᴀɴɴᴇʟs ʟɪsᴛ</b>", "channel"
     elif text == "🎁 SPECIAL COMBO PACKS (BIG SAVE)":
@@ -157,7 +177,6 @@ def store_pagination_handler(message):
     if state["category"] == "home":
         return
 
-    # Page counter increment/decrement
     if message.text == "NEXT ›":
         state["page"] += 1
     else:
@@ -172,20 +191,18 @@ def store_pagination_handler(message):
     bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 5. STORY/ITEM CLICK ROUTER (KEYBOARD REMOVE + INLINE BILLING) ───
+# ─── 5. STORY/ITEM CLICK ROUTER (KEYBOARD REMOVE + AUTO-DELETE LOADING) ───
 @bot.message_handler(func=lambda msg: any(char in msg.text for char in ['[ ₹', '➔ [']))
 def item_selection_handler(message):
     user_id = message.from_user.id
     input_text = message.text
     
-    # Button text se exact content name filter out karna
     clean_name = input_text
     if "." in input_text:
         clean_name = input_text.split(".", 1)[1].split("[")[0].strip()
     elif "💎" in input_text or "🎁" in input_text:
         clean_name = input_text.replace("💎", "").replace("🎁", "").split("➔")[0].strip()
 
-    # Database query based on parsing
     data = channels_col.find_one({"story_name": clean_name}) or \
            channels_col.find_one({"name": clean_name}) or \
            channels_col.find_one({"combo_name": clean_name})
@@ -193,11 +210,10 @@ def item_selection_handler(message):
     if not data:
         return bot.send_message(message.chat.id, "❌ Is item ki details load nahi ho payi. Kripya list se dubara select karein.")
 
-    # 🌟 VIDEO TRICK: Custom reply keyboard hatakar device standard default view lana
+    # FIX: Loading status tracker variable me save kiya taaki isko delete kar sakein
     remove_markup = ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, "⌛ <i>Loading Details...</i>", reply_markup=remove_markup, parse_mode="HTML")
+    load_msg = bot.send_message(message.chat.id, "⌛ <i>Loading Details...</i>", reply_markup=remove_markup, parse_mode="HTML")
 
-    # Building Dynamic Confirmation Panel
     inline_markup = InlineKeyboardMarkup(row_width=1)
     db_id = data.get('item_id') or data.get('channel_id')
 
@@ -215,7 +231,6 @@ def item_selection_handler(message):
     if data.get('demo_link'):
         inline_markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ (ᴛᴇᴀsᴇʀ)", url=data['demo_link']))
 
-    # Direct return path to list view
     inline_markup.add(InlineKeyboardButton("⬅️ BACK TO LIST", callback_data=f"return_to_list_{data.get('is_combo', False) or 'story' in data}"))
 
     details_text = (
@@ -232,8 +247,13 @@ def item_selection_handler(message):
     else:
         bot.send_message(message.chat.id, details_text, reply_markup=inline_markup, parse_mode="HTML")
 
+    # FIX: Main layout client par drop hote hi "Loading Details..." text delete ho jayega
+    try: bot.delete_message(message.chat.id, load_msg.message_id)
+    except: pass
 
-# Inline confirmation parameters and back to dashboard hooks
+
+# ─── CALLBACK HANDLERS ───
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("return_to_list_"))
 def return_to_list_callback(call):
     bot.answer_callback_query(call.id)
@@ -248,7 +268,6 @@ def return_to_list_callback(call):
     bot.send_message(call.message.chat.id, "👇 <i>apni pasand ka item select karke full access lein:</i>", reply_markup=markup, parse_mode="HTML")
 
 
-# ─── PURANE CALLBACK HANDLERS (KEEPING AS IS) ───
 @bot.callback_query_handler(func=lambda call: call.data == "open_store")
 def open_store_callback(call):
     bot.answer_callback_query(call.id)
@@ -257,21 +276,26 @@ def open_store_callback(call):
     except: pass
     bot.send_message(call.message.chat.id, get_store_text(), reply_markup=markup, parse_mode="HTML")
 
+
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_start")
 def back_to_start_callback(call):
     bot.answer_callback_query(call.id)
     try: bot.delete_message(call.message.chat.id, call.message.message_id)
     except: pass
     start_handler(call.message)
+
+
+# ─── MY PLAN DASHBOARD (AUTO-DELETE LOADING LOGIC FIXED) ───
 @bot.callback_query_handler(func=lambda call: call.data == "my_plan")
 def my_plan_callback(call):
     u_id = call.from_user.id
     bot.answer_callback_query(call.id)
     
-    # 🌟 NEW: Dashboard par aate hi niche ke custom categories buttons ko clear karne ke liye
     remove_keyboard = ReplyKeyboardRemove()
     
-    # Dashboard ke andar wapas main menu ya store par jaane ke liye inline buttons
+    # FIX: Temporary Title loading alert ko tracking object me dala
+    load_title_msg = bot.send_message(u_id, "⌛ <i>Opening Dashboard...</i>", reply_markup=remove_keyboard, parse_mode="HTML")
+    
     back_markup = InlineKeyboardMarkup(row_width=2)
     back_markup.add(
         InlineKeyboardButton("🛍️ Open Store", callback_data="open_store"),
@@ -280,9 +304,12 @@ def my_plan_callback(call):
 
     if u_id == config.ADMIN_ID:
         all_subs = list(users_col.find().sort("expiry", 1))
+        
+        # FIX: Admin data processing end hote hi status title message delete hoga
+        try: bot.delete_message(u_id, load_title_msg.message_id)
+        except: pass
+
         if not all_subs:
-            # Pehle loading text bhej kar reply keyboard remove karenge
-            bot.send_message(u_id, "⌛ <i>Opening Admin Dashboard...</i>", reply_markup=remove_keyboard, parse_mode="HTML")
             return bot.send_message(u_id, "📋 Abhi database mein koi active user nahi hai.", reply_markup=back_markup)
 
         report = "📋 <b>ᴀʟʟ ᴀᴄᴛɪᴠᴇ sᴜʙsᴄʀɪᴘᴛɪᴏɴs</b>\n──────────────────────────\n\n"
@@ -292,12 +319,15 @@ def my_plan_callback(call):
             days_left = (datetime.fromtimestamp(s['expiry']) - datetime.now()).days
             report += f"👤 <code>{s['user_id']}</code>\n➔ 📺 {ch_name}\n➔ ⏳ Time left: <b>{max(0, days_left)} Days</b>\n─────────────────\n"
         
-        bot.send_message(u_id, "⌛ <i>Opening Admin Dashboard...</i>", reply_markup=remove_keyboard, parse_mode="HTML")
         bot.send_message(u_id, report, reply_markup=back_markup, parse_mode="HTML")
     else:
         subs = list(users_col.find({"user_id": u_id}))
+        
+        # FIX: User subscription load hote hi loading title clear hoga
+        try: bot.delete_message(u_id, load_title_msg.message_id)
+        except: pass
+
         if not subs:
-            bot.send_message(u_id, "⌛ <i>Opening Dashboard...</i>", reply_markup=remove_keyboard, parse_mode="HTML")
             return bot.send_message(u_id, "❌ <b>ɴᴏ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ</b>\n\nAapka koi bhi plan active nahi hai. Kripya premium store se subscription khareedein.", reply_markup=back_markup, parse_mode="HTML")
 
         res = "👤 <b>ᴍʏ ᴘᴇʀsᴏɴᴀʟ ᴅᴀsʜʙᴏᴀʀᴅ</b>\n──────────────────────────\n\n"
@@ -307,5 +337,4 @@ def my_plan_callback(call):
             expiry = datetime.fromtimestamp(s['expiry']).strftime('%d %b %Y | %I:%M %p')
             res += f"🎬 <b>ɪᴛᴇᴍ:</b> {name}\n⌛ <b>ᴇxᴘɪʀʏ ᴅᴀᴛᴇ:</b> <code>{expiry}</code>\n──────────────────────────\n"
         
-        bot.send_message(u_id, "⌛ <i>Opening Dashboard...</i>", reply_markup=remove_keyboard, parse_mode="HTML")
         bot.send_message(u_id, res, reply_markup=back_markup, parse_mode="HTML")
