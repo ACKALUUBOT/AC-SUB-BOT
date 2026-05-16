@@ -164,7 +164,7 @@ def item_selection_handler(message):
         header, desc_text = "🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ</b>", "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
     else:
         for p_time, p_price in data['plans'].items():
-            inline_markup.add(InlineKeyboardButton(f""✅ CONFIRM & PAY: {get_time_string(p_time)} - ₹{p_price}", callback_data=f"select_{db_id}_{p_time}"))
+            inline_markup.add(InlineKeyboardButton(f"✅ CONFIRM & PAY: {get_time_string(p_time)} - ₹{p_price}", callback_data=f"select_{db_id}_{p_time}"))
         header, desc_text = "👑 <b>ᴠɪᴘ ᴄʜᴀɴɴᴇʟ sᴜʙsᴄʀɪᴘᴛɪᴏɴ</b>", "📢 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ᴄʜᴀɴɴᴇʟ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
 
     if data.get('demo_link'):
