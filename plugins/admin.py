@@ -219,7 +219,7 @@ def finalize_story_setup(message, story_name, price, final_link, file_id):
         "bot_link": final_link, # Aapka diya hua custom link yahan save ho gaya
         "demo_link": demo,
         "file_id": file_id,
-        "type": "story"
+        "type": "channel"
     })
     link = f"https://t.me/{bot.get_me().username}?start={item_id}"
     bot.send_message(message.chat.id, f"✅ <b>sᴛᴏʀʏ sᴇᴛᴜᴘ ғɪɴɪsʜᴇᴅ!</b>\n\nLink: <code>{link}</code>", parse_mode="HTML")
