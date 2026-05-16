@@ -71,7 +71,6 @@ def manage_ch(call):
     name = ch_data.get('story_name') or ch_data.get('name')
     price_info = f"₹{ch_data['price']}" if 'story_name' in ch_data else ch_data['plans']
     
-    # Premium Look Text Layout
     text = (
         f"⚙️ <b>sᴇᴛᴛɪɴɢs:</b> {name}\n"
         f"────────────────────\n"
@@ -81,21 +80,18 @@ def manage_ch(call):
         f"────────────────────"
     )
     
-    # --- DELETE LOGIC ---
-    # Jaise hi user ne button dabaya, button wala pehle ka message delete ho jayega
+    # Jaise hi user ne button dabaya, purana text/photo message delete ho jayega
     try:
         bot.delete_message(call.message.chat.id, call.message.message_id)
     except Exception as e:
-        print(f"Delete Message Error: {e}") # Agar message purana ho toh catch karega
+        print(f"Delete Message Error: {e}")
 
-    # --- PHOTO & TEXT DISPATCH ---
     photo_id = ch_data.get('file_id')
     
     if photo_id:
-        # Agar item ke paas photo data hai toh photo + caption bhejega
+        # Agar item ke paas photo hai toh photo + caption bhejega (Freeze nahi hoga)
         bot.send_photo(call.message.chat.id, photo=photo_id, caption=text, parse_mode="HTML")
     else:
-        # Agar photo data nahi mila toh clean fallback text message bhejega
         bot.send_message(call.message.chat.id, text=text, parse_mode="HTML")
 
 
@@ -106,7 +102,6 @@ def manage_ch(call):
 def add_start(message):
     chat_id = message.chat.id if hasattr(message, 'chat') else message.message.chat.id
     
-    # Content types auto-managed hain taaki forwarded text/photo sab handler me capture ho sake
     msg = bot.send_message(
         chat_id, 
         "📢 <b>ᴀᴅᴅ ɪᴛᴇᴍ:</b>\n\n"
@@ -117,6 +112,10 @@ def add_start(message):
     bot.register_next_step_handler(msg, get_plans)
 
 def get_plans(message):
+    # Safe guard agar admin beech mein cancel karna chahe
+    if message.text and message.text == "/cancel":
+        return bot.send_message(message.chat.id, "❌ Setup cancelled.")
+
     ch_id = None
     ch_name = None
     file_id = None
@@ -125,21 +124,25 @@ def get_plans(message):
     if message.forward_from_chat:
         ch_id = message.forward_from_chat.id
         ch_name = message.forward_from_chat.title
-        # Agar forwarded text/post me koi image attachment thi
         if message.photo:
             file_id = message.photo[-1].file_id
 
     # Case B: Admin ne direct photo select karke upload ki hai
     elif message.photo:
-        ch_id = str(uuid.uuid4())[:8] # Static random unique channel ID reference
+        ch_id = str(uuid.uuid4())[:8] 
         file_id = message.photo[-1].file_id
-        # Caption ki pehli line ko title set karein
         ch_name = message.caption.split("\n")[0] if message.caption else "Untitled Story"
 
     # Case C: Simple text message bheja hai bina media ke
-    else:
+    elif message.text:
         ch_id = str(uuid.uuid4())[:8]
         ch_name = message.text.split("\n")[0]
+        
+    else:
+        # Agar koi invalid content type bhej de (Sticker/Document)
+        msg = bot.send_message(message.chat.id, "❌ Invalid input! Please message forward karein ya photo/text bhejein:")
+        bot.register_next_step_handler(msg, get_plans)
+        return
 
     msg = bot.send_message(
         message.chat.id, 
@@ -147,22 +150,28 @@ def get_plans(message):
         f"Plans likhein (Format - Min:Price):\nExample: <code>1440:30, 10080:150</code>", 
         parse_mode="HTML"
     )
-    # File_id successfully pipeline me aage register handler me forward ki ja rahi hai
     bot.register_next_step_handler(msg, get_demo, ch_id, ch_name, file_id)
 
 def get_demo(message, ch_id, ch_name, file_id):
+    if message.text and message.text == "/cancel":
+        return bot.send_message(message.chat.id, "❌ Setup cancelled.")
+        
     try:
         plans = {p.split(':')[0].strip(): p.split(':')[1].strip() for p in message.text.split(',')}
-        msg = bot.send_message(message.chat.id, "🔗 Demo Link bhejein (Ya 'none'):")
+        msg = bot.send_message(message.chat.id, "🔗 Demo Link bhejein (Ya 'none' ya 'skip'):")
         bot.register_next_step_handler(msg, finalize_channel, ch_id, ch_name, plans, file_id)
     except Exception:
-        bot.send_message(message.chat.id, "❌ Format galat hai! Example: 1440:30, 10080:150")
+        msg = bot.send_message(message.chat.id, "❌ Format galat hai! Example: <code>1440:30, 10080:150</code>\n\nDubara likhein:")
+        bot.register_next_step_handler(msg, get_demo, ch_id, ch_name, file_id)
 
 def finalize_channel(message, ch_id, ch_name, plans, file_id):
-    demo = None if message.text.lower() == 'none' else message.text
+    if message.text and message.text == "/cancel":
+        return bot.send_message(message.chat.id, "❌ Setup cancelled.")
+
+    demo = None if message.text.lower() in ['none', 'skip'] else message.text
     item_id = str(uuid.uuid4())[:10]
     
-    # Document indexing inside Database with file_id reference
+    # Database indexing with conditional file_id field mapping
     channels_col.update_one(
         {"channel_id": ch_id}, 
         {"$set": {
@@ -170,7 +179,7 @@ def finalize_channel(message, ch_id, ch_name, plans, file_id):
             "name": ch_name, 
             "plans": plans, 
             "demo_link": demo, 
-            "file_id": file_id, # DB me unique field save ho rahi hai (Agar photo nahi h toh value None jayegi)
+            "file_id": file_id, # Agar photo nahi hai toh None save hoga automatically
             "type": "channel"
         }}, 
         upsert=True
