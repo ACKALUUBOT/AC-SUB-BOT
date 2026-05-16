@@ -2,14 +2,15 @@ from telebot import types
 from database import channels_col
 import config
 
-# ─── 1. BOTTOM KEYBOARD CATEGORIES MENU ───
+# ─── 1. BOTTOM KEYBOARD CATEGORIES MENU (UPDATED NAAM) ───
 def get_categories_markup():
     """User ko niche keyboard me categories aur Combo Pack ka option dikhane ke liye"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     
+    # FIX: Buttons ke naam start.py ke checks se 100% match kar diye hain
     markup.add(
-        types.KeyboardButton("🔥 SINGLE STORIES (LATEST)"),
-        types.KeyboardButton("👑 VIP CHANNEL ACCESS"),
+        types.KeyboardButton("✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs (ʙᴏᴛ ʟɪɴᴋ)"),
+        types.KeyboardButton("📢 ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ ᴄʜᴀɴɴᴇʟ (ᴠɪᴘ)"),
         types.KeyboardButton("🎁 SPECIAL COMBO PACKS (BIG SAVE)"),
         types.KeyboardButton("« BACK TO MENU")
     )
@@ -68,7 +69,7 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
 
         markup.add(types.KeyboardButton(btn_text))
             
-    # ─── NAVIGATION BUTTONS ROW (Bina Search Ke) ───
+    # ─── NAVIGATION BUTTONS ROW ───
     nav_buttons = []
     if page > 1:
         nav_buttons.append(types.KeyboardButton("‹ PREV"))
@@ -83,14 +84,14 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
     return markup
 
 
-# ─── 3. TEXT FOR CATEGORIES PAGE ───
+# ─── 3. TEXT FOR CATEGORIES PAGE (UPDATED DESCRIPTIONS) ───
 def get_store_text():
     return (
         "🛍️ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ ᴄᴀᴛᴇɢᴏʀɪᴇs</b> 🛍️\n"
         "──────────────────────────\n"
         "ᴀᴀᴘ ᴋɪs ᴛᴀʀᴀʜ ᴋᴀ ᴄᴏɴᴛᴇɴᴛ ᴅᴇᴋʜɴᴀ ᴄʜᴀʜᴛᴇ ʜᴀɪɴ? ɴɪᴄʜᴇ sᴇ ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:\n\n"
-        "🔥 <b>sɪɴɢʟᴇ sᴛᴏʀɪᴇs:</b> ɢᴇᴛ ᴛʜᴇ ʙᴇsᴛ sᴛᴏʀɪᴇs (ʙᴏᴛ ʟɪɴᴋ ᴘʀᴏᴠɪᴅᴇᴅ).\n"
-        "👑 <b>ᴠɪᴘ ᴄʜᴀɴɴᴇʟs:</b> ɢᴇᴛ ᴘʀᴇᴍɪᴜᴍ ᴄʜᴀɴɴᴇʟ sᴛᴏʀɪᴇs (ᴄʜᴀɴɴᴇʟ ʟɪɴᴋ ᴘʀᴏᴠɪᴅᴇᴅ).\n"
-        "🎁 <b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋs:</b> ᴍᴜʟᴛɪ-sᴛᴏʀɪᴇs ʙᴜɴᴅʟᴇ ᴀᴛ ᴀ ᴄʜᴇᴀᴘ ᴘʀɪᴄᴇ!\n"
+        "✨ <b>ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs:</b> ɢᴇᴛ ᴛʜᴇ ʙᴇsᴛ sᴛᴏʀɪᴇs (ʙᴏᴛ ʟɪɴᴋ ᴘʀᴏᴠɪᴅᴇᴅ).\n"
+        "📢 <b>ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ ᴄʜᴀɴɴᴇʟ:</b> ɢᴇᴛ ᴘʀᴇᴍɪᴜᴍ ᴄʜᴀɴɴᴇʟ sᴛᴏʀɪᴇs (ᴠɪᴘ ʟɪɴᴋ ᴘʀᴏᴠɪᴅᴇᴅ).\n"
+        "🎁 <b>sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ᴘᴀᴄᴋs:</b> ᴍᴜʟᴛɪ-sᴛᴏʀɪᴇs ʙᴜɴᴅʟᴇ ᴀᴛ ᴀ ᴄʜᴇᴀᴘ ᴘʀɪᴄᴇ!\n"
         "──────────────────────────"
     )
