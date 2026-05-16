@@ -263,8 +263,49 @@ def back_to_start_callback(call):
     try: bot.delete_message(call.message.chat.id, call.message.message_id)
     except: pass
     start_handler(call.message)
-
 @bot.callback_query_handler(func=lambda call: call.data == "my_plan")
 def my_plan_callback(call):
-    # ... Aapka purane plan ka logic chalega...
-    pass
+    u_id = call.from_user.id
+    bot.answer_callback_query(call.id)
+    
+    # 🌟 NEW: Dashboard par aate hi niche ke custom categories buttons ko clear karne ke liye
+    remove_keyboard = ReplyKeyboardRemove()
+    
+    # Dashboard ke andar wapas main menu ya store par jaane ke liye inline buttons
+    back_markup = InlineKeyboardMarkup(row_width=2)
+    back_markup.add(
+        InlineKeyboardButton("🛍️ Open Store", callback_data="open_store"),
+        InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start")
+    )
+
+    if u_id == config.ADMIN_ID:
+        all_subs = list(users_col.find().sort("expiry", 1))
+        if not all_subs:
+            # Pehle loading text bhej kar reply keyboard remove karenge
+            bot.send_message(u_id, "⌛ <i>Opening Admin Dashboard...</i>", reply_markup=remove_keyboard, parse_mode="HTML")
+            return bot.send_message(u_id, "📋 Abhi database mein koi active user nahi hai.", reply_markup=back_markup)
+
+        report = "📋 <b>ᴀʟʟ ᴀᴄᴛɪᴠᴇ sᴜʙsᴄʀɪᴘᴛɪᴏɴs</b>\n──────────────────────────\n\n"
+        for s in all_subs:
+            ch = channels_col.find_one({"channel_id": s['channel_id']})
+            ch_name = ch.get('story_name') or ch.get('name') or ch.get('combo_name', 'Unknown') if ch else "Unknown Item"
+            days_left = (datetime.fromtimestamp(s['expiry']) - datetime.now()).days
+            report += f"👤 <code>{s['user_id']}</code>\n➔ 📺 {ch_name}\n➔ ⏳ Time left: <b>{max(0, days_left)} Days</b>\n─────────────────\n"
+        
+        bot.send_message(u_id, "⌛ <i>Opening Admin Dashboard...</i>", reply_markup=remove_keyboard, parse_mode="HTML")
+        bot.send_message(u_id, report, reply_markup=back_markup, parse_mode="HTML")
+    else:
+        subs = list(users_col.find({"user_id": u_id}))
+        if not subs:
+            bot.send_message(u_id, "⌛ <i>Opening Dashboard...</i>", reply_markup=remove_keyboard, parse_mode="HTML")
+            return bot.send_message(u_id, "❌ <b>ɴᴏ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ</b>\n\nAapka koi bhi plan active nahi hai. Kripya premium store se subscription khareedein.", reply_markup=back_markup, parse_mode="HTML")
+
+        res = "👤 <b>ᴍʏ ᴘᴇʀsᴏɴᴀʟ ᴅᴀsʜʙᴏᴀʀᴅ</b>\n──────────────────────────\n\n"
+        for s in subs:
+            ch = channels_col.find_one({"channel_id": s['channel_id']})
+            name = ch.get('story_name') or ch.get('name') or ch.get('combo_name', 'Premium Combo') if ch else "Premium Item"
+            expiry = datetime.fromtimestamp(s['expiry']).strftime('%d %b %Y | %I:%M %p')
+            res += f"🎬 <b>ɪᴛᴇᴍ:</b> {name}\n⌛ <b>ᴇxᴘɪʀʏ ᴅᴀᴛᴇ:</b> <code>{expiry}</code>\n──────────────────────────\n"
+        
+        bot.send_message(u_id, "⌛ <i>Opening Dashboard...</i>", reply_markup=remove_keyboard, parse_mode="HTML")
+        bot.send_message(u_id, res, reply_markup=back_markup, parse_mode="HTML")
