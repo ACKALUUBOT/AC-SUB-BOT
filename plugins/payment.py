@@ -5,9 +5,9 @@ from database import channels_col, users_col
 import config
 import time
 
-# ==========================================
+# ===================================================
 # --- EXTRA CONFIG: FRESH START MENU RE-LOAD ---
-# ==========================================
+# ===================================================
 def send_home_menu(chat_id):
     """User ko cancel karne ke baad wapas dashboard par bhejne ke liye helper"""
     markup = InlineKeyboardMarkup(row_width=2)
@@ -21,19 +21,20 @@ def send_home_menu(chat_id):
     )
 
 
-# --- 1. PAYMENT SELECTION (FIXED FOR COMBO, STORY & PHOTO SUPPORT) ---
+# --- 1. PAYMENT SELECTION (FIXED FOR COMBO UNDERSCORE ID) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('select_'))
 def confirm_step(call):
     parts = call.data.split('_')
-    item_id, mins = parts[1], parts[2]
+    mins = parts[-1]               # 'manual' ya plan duration (Jaise '1month')
+    item_id = "_".join(parts[1:-1]) # Fix: 'combo_03b38a' ko poora jod kar nikalega
     
     data = channels_col.find_one({"item_id": item_id}) or \
            channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
     
     if not data: 
-        return bot.answer_callback_query(call.id, "❌ Data not found!", show_alert=True)
+        return bot.answer_callback_query(call.id, f"❌ Data not found! (ID: {item_id})", show_alert=True)
 
-    # Dynamic Pricing & Name selection for all 3 categories
+    # Pricing & Name selection logic for all 3 categories
     if data.get('is_combo'):
         price = data['price']
         display_name = data.get('combo_name', 'Premium Combo')
@@ -67,17 +68,20 @@ def confirm_step(call):
     bot.send_message(call.message.chat.id, text, reply_markup=markup, parse_mode="HTML")
 
 
-# --- 2. MANUAL PAYMENT (QR & UPI) ---
+# --- 2. MANUAL PAYMENT (FIXED FOR COMBO UNDERSCORE ID) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('man_'))
 def manual_pay(call):
-    _, item_id, mins, mode = call.data.split('_')
+    parts = call.data.split('_')
+    mode = parts[-1]                # 'qr' ya 'upi'
+    mins = parts[-2]                # 'manual' ya plan duration
+    item_id = "_".join(parts[1:-2]) # Fix: 'combo_03b38a' ko poora safe nikalega
+    
     data = channels_col.find_one({"item_id": item_id}) or \
            channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
     
     if not data:
-        return bot.answer_callback_query(call.id, "❌ Data Error!", show_alert=True)
+        return bot.answer_callback_query(call.id, "❌ Data Error on Payment!", show_alert=True)
 
-    # Combo vs Story vs Channel pricing fetch
     if data.get('is_combo') or 'story_name' in data:
         price = data['price']
     else:
@@ -104,7 +108,9 @@ def manual_pay(call):
 # --- 3. DIRECT SCREENSHOT SUBMISSION (With Cancel Interceptor) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('paid_'))
 def handle_paid(call):
-    _, item_id, mins = call.data.split('_')
+    parts = call.data.split('_')
+    mins = parts[-1]
+    item_id = "_".join(parts[1:-1]) # Fix: Dynamic item_id handling for paid_
     bot.answer_callback_query(call.id)
     
     try: bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -145,7 +151,7 @@ def send_request_to_admin(message, item_id, mins):
         return bot.send_message(message.chat.id, "❌ Something went wrong, item not found!")
 
     display_name = data.get('combo_name') or data.get('story_name') or data.get('name')
-    bot.send_message(message.chat.id, "⏳ <b>ʀᴇǫᴜᴇsᴛ sᴇɴᴛ!</b>\nAdmin check karke aapka access on kar dega.")
+    bot.send_message(message.chat.id, "⏳ <b><b>ʀᴇǫᴜᴇsᴛ sᴇɴᴛ!</b></b>\nAdmin check karke aapka access on kar dega.")
     
     markup = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("✅ Approve", callback_data=f"app_{message.from_user.id}_{item_id}_{mins}"),
@@ -170,7 +176,10 @@ def process_inline_cancel(call):
 # --- 4. ADMIN APPROVAL (UPDATED WITH MULTI-ID COMBO LINKS SUPPORT) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('app_'))
 def admin_approve(call):
-    _, u_id, item_id, mins = call.data.split('_')
+    parts = call.data.split('_')
+    u_id = parts[1]
+    mins = parts[-1]
+    item_id = "_".join(parts[2:-1]) # Fix: Safe multi-underscore ID extract
     
     data = channels_col.find_one({"item_id": item_id}) or \
            channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
@@ -181,18 +190,18 @@ def admin_approve(call):
     expiry = int(time.time()) + (int(mins) * 60) if mins != 'manual' else int(time.time()) + (365*24*60*60)
     markup = InlineKeyboardMarkup(row_width=1)
 
-    # ─── CASE A: COMBO PACK APPROVAL (Multi-Channels Loop) ───
+    # ─── CASE A: COMBO PACK APPROVAL (Loop For Multi Channels Join Links) ───
     if data.get('is_combo') and 'channels_list' in data:
-        msg = "🎁 <b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋ ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nAapko sabhi linked channels ka access de diya gaya hai. Niche diye buttons se join karein:\n\n"
+        msg = "🎁 <b><b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋ ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nAapko sabhi linked channels ka access de diya gaya hai. Niche diye buttons se join karein:\n\n"
         
         for ch_id in data['channels_list']:
-            # Database me individual channel ki expiry daalo
+            # Database me har channel ke liye alag entry banao expiry ke sath
             users_col.update_one({"user_id": int(u_id), "channel_id": int(ch_id)}, {"$set": {"expiry": expiry}}, upsert=True)
             try:
-                # Har channel ka individual single-use link nikalo
+                # Telegram server se single-use unique join link generate karo
                 invite = bot.create_chat_invite_link(int(ch_id), member_limit=1)
                 
-                # Channel ka naam dhoodho buttons par lagane ke liye
+                # Button pe name show karne ke liye channel title fetch karo
                 ch_info = channels_col.find_one({"channel_id": int(ch_id)})
                 ch_title = ch_info.get('name') or ch_info.get('story_name') if ch_info else f"VIP Channel {ch_id}"
                 
@@ -202,21 +211,21 @@ def admin_approve(call):
                 
         msg += "⚠️ <i>Sabhi links single-use hain, ek baar join hone ke baad automatic expire ho jayengi!</i>"
 
-    # ─── CASE B: VIP CHANNEL APPROVAL (Single Channel Link) ───
+    # ─── CASE B: VIP CHANNEL APPROVAL (Single Link) ───
     elif 'story_name' not in data and 'channel_id' in data:
         users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
         try:
             invite = bot.create_chat_invite_link(data['channel_id'], member_limit=1)
             markup.add(InlineKeyboardButton("📢 Join Channel", url=invite.invite_link))
-            msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nChannel join karne ke liye niche click karein:\n\n⚠️ <i>Yeh link single use hai, ek baar join hone ke baad automatic expire ho jayegi!</i>"
+            msg = "✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nChannel join karne ke liye niche click karein:\n\n⚠️ <i>Yeh link single use hai, ek baar join hone ke baad automatic expire ho jayegi!</i>"
         except: 
             msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\nBot invite link generate nahi kar saka, admin se contact karein."
 
-    # ─── CASE C: SINGLE STORY APPROVAL (Bot Link) ───
+    # ─── CASE C: SINGLE STORY APPROVAL (Bot Start Link) ───
     else:
         users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
         markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀỹ", url=data['bot_link']))
-        msg = f"✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nStory: <b>{data['story_name']}</b>\nNiche button se access karein:"
+        msg = f"✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nStory: <b>{data['story_name']}</b>\nNiche button se access karein:"
 
     try:
         bot.send_message(u_id, msg, reply_markup=markup, parse_mode="HTML", protect_content=True)
