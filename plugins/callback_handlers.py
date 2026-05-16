@@ -33,59 +33,7 @@ def handle_admin_menu_buttons(call):
         remove_user_start(call.message)
 
 
-# ─── 2. PREMIUM STORE HANDLER (UPDATED WITH PLATFORM FILTERS) ───
-@bot.callback_query_handler(func=lambda call: call.data in ["open_store", "store_pratilipi", "store_pocket"])
-def open_store_logic(call):
-    from database import channels_col
-    bot.answer_callback_query(call.id)
-    
-    # Dynamic filtration routing based on custom category triggers
-    callback_data = call.data
-    
-    query = {"story_name": {"$exists": True}}
-    store_title = "ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ sᴛᴏʀᴇ"
-    
-    if callback_data == "store_pratilipi":
-        query["source"] = "pratilipi"
-        store_title = "✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs ✨"
-    elif callback_data == "store_pocket":
-        query["source"] = "pocket"
-        store_title = "🔥 ᴘᴏᴄᴋᴇᴛ ғᴍ sᴛᴏʀɪᴇs 🔥"
-        
-    # Database se filter ki hui stories nikalna
-    all_stories = list(channels_col.find(query))
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    
-    if not all_stories:
-        markup.add(types.InlineKeyboardButton("🚫 No Stories Available", callback_data="none"))
-    else:
-        for story in all_stories:
-            btn_text = f"💎 {story['story_name']} ➔ [ Starts @ ₹{story['price']} ]"
-            url = f"https://t.me/{bot.get_me().username}?start={story['item_id']}"
-            markup.add(types.InlineKeyboardButton(btn_text, url=url))
-            
-    markup.add(types.InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴄᴀᴛᴇɢᴏʀɪᴇs", callback_data="back_to_start"))
-    
-    store_text = (
-        f"<b>{store_title}</b>\n"
-        f"────────────────────\n"
-        f"👇 <i>apni pasand ka item select karke full access lein:</i>"
-    )
-    
-    try:
-        bot.edit_message_text(
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            text=store_text,
-            reply_markup=markup,
-            parse_mode="HTML"
-        )
-    except Exception as e:
-        # Fallback handle text sync errors match criteria
-        bot.send_message(call.message.chat.id, store_text, reply_markup=markup, parse_mode="HTML")
-
-
-# ─── 3. BACK & DASHBOARD HANDLERS (CRASH RESOLVED) ───
+RESOLVED) ───
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_start")
 def back_to_start_handler(call):
     bot.answer_callback_query(call.id)
