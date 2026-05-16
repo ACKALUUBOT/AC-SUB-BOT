@@ -39,14 +39,14 @@ def get_items_by_category_markup(category_type, bot_username):
                 price = f"₹{item['price']}"
                 param = item['item_id']
                 icon = "🔥"
-                badge = " [sᴛᴏʀʏ]"
+                badge = " [ʙᴏᴛ]"
             elif category_type == "channel":
                 name = item['name']
                 plans = item.get('plans', {})
                 price = f"Starts @ ₹{min([int(p) for p in plans.values()])}" if plans else "Check Plans"
                 param = item.get('channel_id')
                 icon = "👑"
-                badge = " [<b>ᴄʜᴀɴɴᴇʟ</b>]"
+                badge = " [ᴄʜᴀɴɴᴇʟ]"
             elif category_type == "combo":
                 # NEW: Combo pack rendering
                 name = item['combo_name']
