@@ -4,8 +4,7 @@ from utils import bot, get_time_string
 from database import channels_col, users_col
 import config
 import time
-
-# Hum start.py ke naye components ko import kar rahe hain taaki back path smoothly kaam kare
+from plugins.start import USER_STATES
 from plugins.store import get_items_by_category_markup, get_categories_markup, get_store_text
 
 # ===================================================
