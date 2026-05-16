@@ -40,7 +40,7 @@ def confirm_step(call):
     markup.add(
         InlineKeyboardButton("💳 ᴘᴀʏ ᴠɪᴀ ǫʀ sᴄᴀɴ", callback_data=f"man_{item_id}_{mins}_qr"),
         InlineKeyboardButton("📲 ᴘᴀʏ ᴠɪᴀ ᴜᴘɪ ɪᴅ", callback_data=f"man_{item_id}_{mins}_upi"),
-        InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇɴᴛ", callback_data="cancel_payment") # <-- Cancel option 1
+        InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇɴᴛ", callback_data="cancel_payment")
     )
     
     text = (
@@ -72,7 +72,7 @@ def manual_pay(call):
     
     markup = InlineKeyboardMarkup(row_width=1).add(
         InlineKeyboardButton("✅ sᴜʙᴍɪᴛ sᴄʀᴇᴇɴsʜᴏᴛ", callback_data=f"paid_{item_id}_{mins}"),
-        InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇɴᴛ", callback_data="cancel_payment") # <-- Cancel option 2
+        InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇɴᴛ", callback_data="cancel_payment")
     )
 
     if mode == "qr":
@@ -94,7 +94,6 @@ def handle_paid(call):
     try: bot.delete_message(call.message.chat.id, call.message.message_id)
     except: pass
     
-    # Screenshot mangte waqt screen par direct Cancel ka option
     markup = InlineKeyboardMarkup().add(InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇɴᴛ", callback_data="cancel_payment"))
         
     msg = bot.send_message(
@@ -107,11 +106,9 @@ def handle_paid(call):
     bot.register_next_step_handler(msg, send_request_to_admin, item_id, mins)
 
 def send_request_to_admin(message, item_id, mins):
-    # Check A: Agar user chat me /cancel ya cancel likh kar bhej de
     if message.text and message.text.lower() in ['/cancel', 'cancel']:
         return send_home_menu(message.chat.id)
 
-    # Check B: Agar user ne photo nahi bheji toh dubara mauka do + cancel option do
     if message.content_type != 'photo':
         markup = InlineKeyboardMarkup().add(InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇɴᴛ", callback_data="cancel_payment"))
         msg = bot.send_message(
@@ -145,15 +142,9 @@ def send_request_to_admin(message, item_id, mins):
 @bot.callback_query_handler(func=lambda call: call.data == "cancel_payment")
 def process_inline_cancel(call):
     bot.answer_callback_query(call.id, "Process Cancelled!")
-    
-    # 1. Agla photo check karne wala next-step-handler completely delete karein taaki bot freeze na ho
     bot.clear_step_handler_by_chat_id(chat_id=call.message.chat.id)
-    
-    # 2. Purani payment screen screen se hata dein
     try: bot.delete_message(call.message.chat.id, call.message.message_id)
     except: pass
-        
-    # 3. User ko safe land karayein main dashboard par
     return send_home_menu(call.message.chat.id)
 
 
@@ -173,14 +164,13 @@ def admin_approve(call):
     markup = InlineKeyboardMarkup()
     if 'story_name' not in data and 'channel_id' in data:
         try:
-            # FIX: member_limit=1 se auto single-use link generate hoga
             invite = bot.create_chat_invite_link(data['channel_id'], member_limit=1)
             markup.add(InlineKeyboardButton("📢 Join Channel", url=invite.invite_link))
             msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nChannel join karne ke liye niche click karein:\n\n⚠️ <i>Yeh link single use hai, ek baar join hone ke baad automatic expire ho jayegi!</i>"
         except: 
             msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\nBot invite link generate nahi kar saka, admin se contact karein."
     else:
-        markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀʏ", url=data['bot_link']))
+        markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀỹ", url=data['bot_link']))
         msg = f"✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nStory: <b>{data['story_name']}</b>\nNiche button se access karein:"
 
     try:
@@ -189,8 +179,34 @@ def admin_approve(call):
         pass
     bot.edit_message_caption(f"✅ Approved for User: {u_id}", call.message.chat.id, call.message.message_id)
 
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('rej_'))
 def admin_reject(call):
     u_id = call.data.split('_')[1]
     bot.edit_message_caption("❌ Payment Rejected!", call.message.chat.id, call.message.message_id)
     bot.send_message(u_id, "❌ Aapka payment reject ho gaya hai. Support se baat karein.")
+
+
+# ========================================================
+# --- 5. AUTOMATIC LINK REVOKE (ANTI-REJOIN SYSTEM) ---
+# ========================================================
+@bot.chat_member_handler()
+def handle_chat_member_updates(update):
+    """Jaise hi koi user channel join karega, yeh handler chalega aur link delete kar dega"""
+    if update.chat.type != "channel":
+        return
+
+    # Check: Naya status member hai aur purana status member nahi tha
+    if update.new_chat_member.status == "member" and update.old_chat_member.status in ["left", "kicked", "restricted"]:
+        
+        # Check: Kya user kisi invite link se aaya hai?
+        if update.invite_link and update.invite_link.invite_link:
+            used_link = update.invite_link.invite_link
+            channel_id = update.chat.id
+            
+            try:
+                # Link ko Telegram server se completely delete (revoke) kar do
+                bot.revoke_chat_invite_link(chat_id=channel_id, invite_link=used_link)
+                print(f"[SUCCESS] Link Revoked and Deleted: {used_link}")
+            except Exception as e:
+                print(f"[ERROR] Auto-revoke failed: {e}")
