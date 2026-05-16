@@ -5,7 +5,6 @@ from database import channels_col, users_col
 from datetime import datetime
 import config
 
-# Store functions ko import karein (Ensure store.py same folder me ho ya sahi path ho)
 from plugins.store import get_categories_markup, get_items_by_category_markup, get_store_text
 
 @bot.message_handler(commands=['start'])
@@ -13,7 +12,7 @@ def start_handler(message):
     user_id = message.from_user.id
     text = message.text.split() if message.text else []
 
-    # ─── 1. DEEP LINK ENTRY (STORY & CHANNEL FROM BUTTONS) ───
+    # ─── 1. DEEP LINK ENTRY (STORY, CHANNEL & COMBO) ───
     if len(text) > 1:
         param = text[1]
         data = channels_col.find_one({"item_id": param}) or \
@@ -23,15 +22,27 @@ def start_handler(message):
             markup = InlineKeyboardMarkup(row_width=1)
             db_id = data.get('item_id') or data.get('channel_id')
             
-            if 'story_name' in data:
+            # CONDITION 1: COMBO PACK BUYING
+            if data.get('is_combo'):
+                markup.add(InlineKeyboardButton(f"💳 🎁 ᴜɴʟᴏᴄᴋ ᴄᴏᴍʙᴏ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
+                display_name = data['combo_name']
+                header = "🎁 <b>ᴘʀᴇᴍɪᴜᴍ sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ʙᴜɴᴅʟᴇ</b>"
+                desc_text = f"📝 <b>ɪɴᴄʟᴜᴅᴇᴅ sᴛᴏʀɪᴇs:</b>\n<i>{data.get('description', 'Multiple premium stories inside!')}</i>"
+            
+            # CONDITION 2: SINGLE STORY
+            elif 'story_name' in data:
                 markup.add(InlineKeyboardButton(f"💳 ⚡ ᴜɴʟᴏᴄᴋ sᴛᴏʀʏ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
                 display_name = data['story_name']
                 header = "🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ</b>"
+                desc_text = "⚡ <i>Instant access paane ke liye niche se payment karein.</i>"
+            
+            # CONDITION 3: VIP CHANNEL
             else:
                 for p_time, p_price in data['plans'].items():
                     markup.add(InlineKeyboardButton(f"👑 {get_time_string(p_time)} Access ➔ ₹{p_price}", callback_data=f"select_{db_id}_{p_time}"))
                 display_name = data.get('name', 'Premium Access')
                 header = "👑 <b>ᴠɪᴘ ᴄʜᴀɴɴᴇʟ sᴜʙsᴄʀɪᴘᴛɪᴏɴ</b>"
+                desc_text = "⚡ <i>Instant access paane ke liye niche se apna plan select karke payment karein.</i>"
 
             if data.get('demo_link'):
                 markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ (ᴛᴇᴀsᴇʀ)", url=data['demo_link']))
@@ -41,8 +52,8 @@ def start_handler(message):
             premium_text = (
                 f"{header}\n"
                 f"──────────────────────────\n"
-                f"📦 <b>ɪᴛᴇᴍ ɴᴀᴍᴇ:</b> <code>{display_name}</code>\n\n"
-                f"⚡ <i>Instant access paane ke liye niche se apna plan select karke payment karein:</i>\n"
+                f"📦 <b>ᴘᴀᴄᴋ ɴᴀᴍᴇ:</b> <code>{display_name}</code>\n\n"
+                f"{desc_text}\n"
                 f"──────────────────────────"
             )
             
@@ -64,7 +75,8 @@ def start_handler(message):
     if user_id == config.ADMIN_ID:
         markup.add(
             InlineKeyboardButton("➕ ᴀᴅᴅ sᴛᴏʀʏ", callback_data="admin_story"),
-            InlineKeyboardButton("📺 ᴀᴅᴅ ᴄʜᴀɴɴᴇʟ", callback_data="admin_add")
+            InlineKeyboardButton("📺 ᴀᴅᴅ ᴄʜᴀɴɴᴇʟ", callback_data="admin_add"),
+            InlineKeyboardButton("🎁 ᴄʀᴇᴀᴛᴇ ᴄᴏᴍʙᴏ", callback_data="admin_combo") # NEW ADMIN BUTTON
         )
         markup.add(
             InlineKeyboardButton("⚙️ ᴍᴀɴᴀɢᴇ ᴀʟʟ", callback_data="admin_channels"),
@@ -84,11 +96,10 @@ def start_handler(message):
     bot.send_message(message.chat.id, final_text, reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 3. CALLBACK HANDLERS FOR CATEGORIES STORE ───
+# ─── 3. CALLBACK HANDLERS ───
 
 @bot.callback_query_handler(func=lambda call: call.data == "open_store")
 def open_store_callback(call):
-    """Main category menu open karne ke liye"""
     bot.answer_callback_query(call.id)
     markup = get_categories_markup()
     store_text = get_store_text()
@@ -102,15 +113,16 @@ def open_store_callback(call):
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("view_cat_"))
-def view_category_items(call):
-    """Selected category ke items screen par dikhane ke liye"""
+def view_category_updates(call):
     bot.answer_callback_query(call.id)
-    category_type = call.data.split("_")[2] # 'story' ya 'channel' extract karega
+    category_type = call.data.split("_")[2] # 'story', 'channel' ya 'combo'
     
     bot_username = bot.get_me().username
     markup = get_items_by_category_markup(category_type, bot_username)
     
-    cat_title = "🎬 <b>sɪɴɢʟᴇ sᴛᴏʀɪᴇs ʟɪsᴛ</b>" if category_type == "story" else "💎 <b>ᴠɪᴘ ᴄʜᴀɴɴᴇʟs ʟɪsᴛ</b>"
+    if category_type == "story": cat_title = "🎬 <b>sɪɴɢʟᴇ sᴛᴏʀɪᴇs ʟɪsᴛ</b>"
+    elif category_type == "channel": cat_title = "💎 <b>ᴠɪᴘ ᴄʜᴀɴɴᴇʟs ʟɪsᴛ</b>"
+    else: cat_title = "🎁 <b>✨ ᴘʀᴇᴍɪᴜᴍ ᴄᴏᴍʙᴏ ᴘᴀᴄᴋs ✨</b>"
     
     text = (
         f"{cat_title}\n"
@@ -140,10 +152,10 @@ def my_plan_callback(call):
         if not all_subs:
             return bot.send_message(u_id, "📋 Abhi database mein koi active user nahi hai.", reply_markup=back_markup)
 
-        report = "📋 <b>ᴀʟʟ ᴀᴄᴛɪᴠᴇ sᴜʙsᴄʀɪᴘᴛɪᴏṇs</b>\n──────────────────────────\n\n"
+        report = "📋 <b>ᴀʟʟ ᴀᴄᴛɪᴠᴇ sᴜʙsᴄʀɪᴘᴛɪᴏɴs</b>\n──────────────────────────\n\n"
         for s in all_subs:
             ch = channels_col.find_one({"channel_id": s['channel_id']})
-            ch_name = ch.get('story_name') or ch.get('name') if ch else "Unknown Item"
+            ch_name = ch.get('story_name') or ch.get('name') or ch.get('combo_name', 'Unknown') if ch else "Unknown Item"
             days_left = (datetime.fromtimestamp(s['expiry']) - datetime.now()).days
             report += f"👤 <code>{s['user_id']}</code>\n➔ 📺 {ch_name}\n➔ ⏳ Time left: <b>{max(0, days_left)} Days</b>\n─────────────────\n"
         bot.send_message(u_id, report, reply_markup=back_markup, parse_mode="HTML")
@@ -155,7 +167,7 @@ def my_plan_callback(call):
         res = "👤 <b>ᴍʏ ᴘᴇʀsᴏɴᴀʟ ᴅᴀsʜʙᴏᴀʀᴅ</b>\n──────────────────────────\n\n"
         for s in subs:
             ch = channels_col.find_one({"channel_id": s['channel_id']})
-            name = ch.get('story_name') or ch.get('name') if ch else "Premium Item"
+            name = ch.get('story_name') or ch.get('name') or ch.get('combo_name', 'Premium Combo') if ch else "Premium Item"
             expiry = datetime.fromtimestamp(s['expiry']).strftime('%d %b %Y | %I:%M %p')
             res += f"🎬 <b>ɪᴛᴇᴍ:</b> {name}\n⌛ <b>ᴇxᴘɪʀʏ ᴅᴀᴛᴇ:</b> <code>{expiry}</code>\n──────────────────────────\n"
         bot.send_message(u_id, res, reply_markup=back_markup, parse_mode="HTML")
