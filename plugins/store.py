@@ -2,24 +2,24 @@ from telebot import types
 from database import channels_col
 import config
 
-# ─── 1. UPDATED CATEGORIES MENU (WITH COMBO) ───
+# ─── 1. BOTTOM KEYBOARD CATEGORIES MENU ───
 def get_categories_markup():
-    """User ko categories ke sath Combo Pack ka option dikhane ke liye"""
-    markup = types.InlineKeyboardMarkup(row_width=1)
+    """User ko niche keyboard me categories aur Combo Pack ka option dikhane ke liye"""
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     
     markup.add(
-        types.InlineKeyboardButton("🔥 sɪɴɢʟᴇ sᴛᴏʀɪᴇs (ʟᴀᴛᴇsᴛ)", callback_data="view_cat_story"),
-        types.InlineKeyboardButton("👑 ᴠɪᴘ ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss", callback_data="view_cat_channel"),
-        types.InlineKeyboardButton("🎁 sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ᴘᴀᴄᴋs (ʙɪɢ sᴀᴠᴇ)", callback_data="view_cat_combo") # NEW
+        types.KeyboardButton("🔥 SINGLE STORIES (LATEST)"),
+        types.KeyboardButton("👑 VIP CHANNEL ACCESS"),
+        types.KeyboardButton("🎁 SPECIAL COMBO PACKS (BIG SAVE)"),
+        types.KeyboardButton("« BACK TO MENU")
     )
-    
-    markup.add(types.InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
     return markup
 
 
-# ─── 2. FILTERED ITEMS MENU BY CATEGORY ───
-def get_items_by_category_markup(category_type, bot_username):
-    markup = types.InlineKeyboardMarkup(row_width=1)
+# ─── 2. PAGINATED ITEMS MENU BY CATEGORY (8 ITEMS PER PAGE) ───
+def get_items_by_category_markup(category_type, bot_username=None, page=1):
+    """Dynamic database retrieval with pagination (8 items per page) without search button"""
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     
     # Database filter logic for 3 categories
     if category_type == "story":
@@ -27,39 +27,59 @@ def get_items_by_category_markup(category_type, bot_username):
     elif category_type == "channel":
         all_items = list(channels_col.find({"name": {"$exists": True}, "is_combo": {"$exists": False}}))
     elif category_type == "combo":
-        # NEW: Combo items filter
         all_items = list(channels_col.find({"is_combo": True}))
         
     if not all_items:
-        markup.add(types.InlineKeyboardButton("🚫 sᴛᴏʀᴇ ɪs ᴇᴍᴘᴛʏ", callback_data="none"))
-    else:
-        for item in all_items:
-            if category_type == "story":
-                name = item['story_name']
-                price = f"₹{item['price']}"
-                param = item['item_id']
-                icon = "🔥"
-                badge = " [ʙᴏᴛ]"
-            elif category_type == "channel":
-                name = item['name']
-                plans = item.get('plans', {})
-                price = f"Starts @ ₹{min([int(p) for p in plans.values()])}" if plans else "Check Plans"
-                param = item.get('channel_id')
-                icon = "👑"
-                badge = " [ᴄʜᴀɴɴᴇʟ]"
-            elif category_type == "combo":
-                # NEW: Combo pack rendering
-                name = item['combo_name']
-                price = f"₹{item['price']}"
-                param = item['item_id'] # Combo ke liye bhi unique item_id use karenge
-                icon = "🎁"
-                badge = " [ᴄᴏᴍʙᴏ]"
+        markup.add(types.KeyboardButton("🚫 STORE IS EMPTY"))
+        markup.add(types.KeyboardButton("🔙 BACK TO CATEGORIES"))
+        return markup
 
-            btn_text = f"{icon} {name}{badge} ➔ {price}"
-            url = f"https://t.me/{bot_username}?start={param}"
-            markup.add(types.InlineKeyboardButton(text=btn_text, url=url))
+    # ─── PAGINATION LOGIC (8 items per page) ───
+    per_page = 8
+    total_items = len(all_items)
+    total_pages = (total_items + per_page - 1) // per_page
+    
+    # Boundary check for pages
+    if page < 1: page = 1
+    if page > total_pages: page = total_pages
+    
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    sliced_items = all_items[start_idx:end_idx]
+
+    # Render current page items line-by-line
+    for index, item in enumerate(sliced_items, start=start_idx + 1):
+        if category_type == "story":
+            name = item['story_name']
+            price = f"[ ₹{item['price']} ]"
+            # Video style format: "1. Story Name [ ₹130 ]"
+            btn_text = f"{index}. {name} {price}"
             
-    markup.add(types.InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴄᴀᴛᴇɢᴏʀɪᴇs", callback_data="open_store"))
+        elif category_type == "channel":
+            name = item['name']
+            plans = item.get('plans', {})
+            price = f"[ Starts @ ₹{min([int(p) for p in plans.values()])} ]" if plans else "[ Check Plans ]"
+            btn_text = f"💎 {name} ➔ {price}"
+            
+        elif category_type == "combo":
+            name = item['combo_name']
+            price = f"[ ₹{item['price']} ]"
+            btn_text = f"🎁 {name} ➔ {price}"
+
+        markup.add(types.KeyboardButton(btn_text))
+            
+    # ─── NAVIGATION BUTTONS ROW (Bina Search Ke) ───
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(types.KeyboardButton("‹ PREV"))
+    if page < total_pages:
+        nav_buttons.append(types.KeyboardButton("NEXT ›"))
+        
+    if nav_buttons:
+        markup.row(*nav_buttons)
+        
+    # Main exit options at bottom
+    markup.add(types.KeyboardButton("🔙 BACK TO CATEGORIES"))
     return markup
 
 
