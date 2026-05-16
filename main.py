@@ -5,6 +5,10 @@ from utils import bot
 from server import app
 from scheduler import start_scheduler
 
+# ─── 🌟 GLOBAL STATE TRACKER (CROSS-PLUGIN SYNC) ───
+# Isko yahan rakhne se plugins.start aur plugins.payment dono ise bina crash ke use kar payenge
+USER_STATES = {}  # Format: {user_id: {"category": "story", "page": 1}}
+
 # Plugins folder ke handlers register karne ke liye explicitly import karein
 import plugins.start
 import plugins.admin
