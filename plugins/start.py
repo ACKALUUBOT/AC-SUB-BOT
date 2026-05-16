@@ -1,4 +1,4 @@
-Import uuid
+import uuid
 from telebot import types
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from utils import bot, get_time_string
