@@ -25,7 +25,8 @@ if __name__ == '__main__':
     # 2. Start Background Scheduler for Expiries
     start_scheduler()
     
-    # 3. Start Telegram Bot Polling
+    # 3. Start Telegram Bot Polling (With Allowed Updates for Anti-Rejoin)
     print("Bot setup separated successfully! Starting polling...")
-    bot.infinity_polling()
-
+    
+    # FIX: Yahan allowed_updates daal diya hai taaki chat_member_handler sahi se trigger ho sake
+    bot.infinity_polling(allowed_updates=["message", "callback_query", "chat_member"])
