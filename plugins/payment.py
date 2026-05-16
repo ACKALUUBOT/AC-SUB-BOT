@@ -11,11 +11,8 @@ import time
 def send_home_menu(chat_id):
     """User ko cancel karne ke baad wapas dashboard par bhejne ke liye helper"""
     markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton("✨ ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀᴇ ✨", callback_data="open_store"))
-    markup.add(
-        InlineKeyboardButton("📊 ᴍʏ ᴘʟᴀɴ", callback_data="my_plan"),
-        InlineKeyboardButton("📞 sᴜᴘᴘᴏʀᴛ", url=f"https://t.me/{config.CONTACT_USERNAME}" if hasattr(config, 'CONTACT_USERNAME') else "https://t.me/telegram")
-    )
+    markup.add(InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
+
     bot.send_message(
         chat_id, 
         "❌ <b>ᴘᴀʏᴍᴇɴᴛ ᴄᴀɴᴄᴇʟʟᴇᴅ!</b>\n\nAapka current payment process rok diya gaya hai. Aap niche diye gaye menu se fir se shuru kar sakte hain:", 
