@@ -5,56 +5,15 @@ from database import channels_col, users_col
 from datetime import datetime
 import config
 
-# ─── HELPER FUNCTION FOR STORE (PREMIUM VIP DESIGN) ───
-def get_store_markup():
-    all_items = list(channels_col.find({
-        "$or": [
-            {"story_name": {"$exists": True}},
-            {"name": {"$exists": True}}
-        ]
-    }))
-    
-    markup = InlineKeyboardMarkup(row_width=1)
-    
-    if not all_items:
-        markup.add(InlineKeyboardButton("🚫 sᴛᴏʀᴇ ɪs ᴇᴍᴘᴛʏ", callback_data="none"))
-    else:
-        for item in all_items:
-            # CASE 1: Manual Premium Story
-            if 'story_name' in item:
-                display_name = item['story_name']
-                price_tag = f"₹{item['price']}"
-                param = item.get('item_id')
-                icon = "🔥" # Hot trending look for single stories
-                badge = " [sᴛᴏʀʏ]"
-            # CASE 2: Forwarded Subscription Channel
-            else:
-                display_name = item.get('name', 'Premium Channel')
-                plans = item.get('plans', {})
-                if plans:
-                    min_price = min([int(p) for p in plans.values()])
-                    price_tag = f"Starts @ ₹{min_price}"
-                else:
-                    price_tag = "Check Plans"
-                param = item.get('channel_id')
-                icon = "👑" # Royal VIP look for full channels
-                badge = " [ᴄʜᴀɴɴᴇʟ]"
+# Store functions ko import karein (Ensure store.py same folder me ho ya sahi path ho)
+from plugins.store import get_categories_markup, get_items_by_category_markup, get_store_text
 
-            btn_text = f"{icon} {display_name}{badge} ➔ {price_tag}"
-            url = f"https://t.me/{bot.get_me().username}?start={param}"
-            markup.add(InlineKeyboardButton(btn_text, url=url))
-            
-    markup.add(InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
-    return markup
-
-
-# ─── MAIN START HANDLER (WITH DEEP LINK SUPPORT) ───
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     user_id = message.from_user.id
     text = message.text.split() if message.text else []
 
-    # ─── 1. DEEP LINK ENTRY (STORY & CHANNEL) WITH PHOTO SUPPORT ───
+    # ─── 1. DEEP LINK ENTRY (STORY & CHANNEL FROM BUTTONS) ───
     if len(text) > 1:
         param = text[1]
         data = channels_col.find_one({"item_id": param}) or \
@@ -95,7 +54,7 @@ def start_handler(message):
 
     # ─── 2. MAIN DASHBOARD ───
     markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton("🛍️ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ sᴛᴏʀᴇ 🛍️", callback_data="open_store"))
+    markup.add(InlineKeyboardButton("🛍️ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ sᴛᴏʀｅ 🛍️", callback_data="open_store"))
     
     markup.add(
         InlineKeyboardButton("👤 ᴍʏ ᴅᴀsʜʙᴏᴀʀᴅ", callback_data="my_plan"),
@@ -113,7 +72,7 @@ def start_handler(message):
         )
 
     title = "⚡ <b>ᴀᴅᴍɪɴ ᴍᴀsᴛᴇʀ ᴘᴀɴᴇʟ</b>" if user_id == config.ADMIN_ID else "✨ <b>ᴍᴇᴍʙᴇʀ ᴍᴀɪɴ ᴍᴇɴᴜ</b>"
-    desc = "Welcome Back, Boss! Complete system controls niche diye gaye hain." if user_id == config.ADMIN_ID else "Hamari premium adult/romantic stories aur backup VIP channels ka maza lene ke liye niche diya store check karein."
+    desc = "Welcome Back, Boss! Complete system controls niche diye gaye hain." if user_id == config.ADMIN_ID else "Hamari premium stories aur VIP backup channels ka maza lene ke liye niche diya store check karein."
 
     final_text = (
         f"{title}\n"
@@ -125,21 +84,14 @@ def start_handler(message):
     bot.send_message(message.chat.id, final_text, reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 3. CALLBACK HANDLERS ───
+# ─── 3. CALLBACK HANDLERS FOR CATEGORIES STORE ───
 
 @bot.callback_query_handler(func=lambda call: call.data == "open_store")
 def open_store_callback(call):
+    """Main category menu open karne ke liye"""
     bot.answer_callback_query(call.id)
-    markup = get_store_markup()
-    store_text = (
-        "✨ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ sᴛᴏʀᴇ</b> ✨\n"
-        "──────────────────────────\n"
-        "Niche hamari sabhi hot, exclusive aur trending content ki list hai.\n\n"
-        "📌 <b>ɪᴄᴏɴ ɢᴜɪᴅᴇ:</b>\n"
-        "➔ 🔥 = <code>sɪɴɢʟᴇ sᴛᴏʀʏ ᴀᴄᴄᴇss</code>\n"
-        "➔ 👑 = <code>ᴠɪᴘ ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss</code>\n\n"
-        "👇 <i>Apni pasand ka item select karke full access lein:</i>"
-    )
+    markup = get_categories_markup()
+    store_text = get_store_text()
     
     if call.message.content_type == 'photo':
         try: bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -147,6 +99,25 @@ def open_store_callback(call):
         bot.send_message(call.message.chat.id, store_text, reply_markup=markup, parse_mode="HTML")
     else:
         bot.edit_message_text(store_text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("view_cat_"))
+def view_category_items(call):
+    """Selected category ke items screen par dikhane ke liye"""
+    bot.answer_callback_query(call.id)
+    category_type = call.data.split("_")[2] # 'story' ya 'channel' extract karega
+    
+    bot_username = bot.get_me().username
+    markup = get_items_by_category_markup(category_type, bot_username)
+    
+    cat_title = "🎬 <b>sɪɴɢʟᴇ sᴛᴏʀɪᴇs ʟɪsᴛ</b>" if category_type == "story" else "💎 <b>ᴠɪᴘ ᴄʜᴀɴɴᴇʟs ʟɪsᴛ</b>"
+    
+    text = (
+        f"{cat_title}\n"
+        f"──────────────────────────\n"
+        f"👇 <i>Apni pasand ka item select karke full access lein:</i>"
+    )
+    bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_start")
@@ -162,7 +133,6 @@ def my_plan_callback(call):
     u_id = call.from_user.id
     bot.answer_callback_query(call.id)
     
-    # Simple Back Button Dashboard ke liye
     back_markup = InlineKeyboardMarkup().add(InlineKeyboardButton("« ʙᴀᴄᴋ ᴛᴏ ᴍᴇɴᴜ", callback_data="back_to_start"))
 
     if u_id == config.ADMIN_ID:
@@ -170,7 +140,7 @@ def my_plan_callback(call):
         if not all_subs:
             return bot.send_message(u_id, "📋 Abhi database mein koi active user nahi hai.", reply_markup=back_markup)
 
-        report = "📋 <b>ᴀʟʟ ᴀᴄᴛɪᴠᴇ sᴜʙsᴄʀɪᴘᴛɪᴏɴs</b>\n──────────────────────────\n\n"
+        report = "📋 <b>ᴀʟʟ ᴀᴄᴛɪᴠᴇ sᴜʙsᴄʀɪᴘᴛɪᴏṇs</b>\n──────────────────────────\n\n"
         for s in all_subs:
             ch = channels_col.find_one({"channel_id": s['channel_id']})
             ch_name = ch.get('story_name') or ch.get('name') if ch else "Unknown Item"
