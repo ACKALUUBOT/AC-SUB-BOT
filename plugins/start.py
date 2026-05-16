@@ -7,7 +7,6 @@ import config
 
 # ─── HELPER FUNCTION FOR STORE (Fixed for Manual & Forwarded) ───
 def get_store_markup():
-    # Database se Stories (story_name) aur Channels (name) dono fetch karein
     all_items = list(channels_col.find({
         "$or": [
             {"story_name": {"$exists": True}},
@@ -21,19 +20,17 @@ def get_store_markup():
         markup.add(InlineKeyboardButton("🚫 No Items Available", callback_data="none"))
     else:
         for item in all_items:
-            # CASE 1: Agar Manual Story hai (Command wali)
+            # CASE 1: Manual Story
             if 'story_name' in item:
                 display_name = item['story_name']
                 price_tag = f"₹{item['price']}"
                 param = item.get('item_id')
                 icon = "🎬"
-
-            # CASE 2: Agar Forwarded Channel hai (Subscription wali)
+            # CASE 2: Forwarded Channel
             else:
                 display_name = item.get('name', 'Premium Channel')
                 plans = item.get('plans', {})
                 if plans:
-                    # Sabse sasta plan nikalne ke liye
                     min_price = min([int(p) for p in plans.values()])
                     price_tag = f"Starts @ ₹{min_price}"
                 else:
@@ -41,10 +38,7 @@ def get_store_markup():
                 param = item.get('channel_id')
                 icon = "💎"
 
-            # Button Text: [Icon] Name — Price
             btn_text = f"{icon} {display_name} — {price_tag}"
-            
-            # Deep link URL logic
             url = f"https://t.me/{bot.get_me().username}?start={param}"
             markup.add(InlineKeyboardButton(btn_text, url=url))
             
@@ -54,12 +48,12 @@ def get_store_markup():
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     user_id = message.from_user.id
-    text = message.text.split()
+    # Safety Check: check karein ki message message object hai ya call object ka message
+    text = message.text.split() if message.text else []
 
     # ─── 1. DEEP LINK ENTRY (STORY & CHANNEL) WITH PHOTO SUPPORT ───
     if len(text) > 1:
         param = text[1]
-        # Database check: item_id ya channel_id dono ke liye
         data = channels_col.find_one({"item_id": param}) or \
                channels_col.find_one({"channel_id": int(param) if param.replace('-','').isdigit() else 0})
 
@@ -67,13 +61,10 @@ def start_handler(message):
             markup = InlineKeyboardMarkup(row_width=1)
             db_id = data.get('item_id') or data.get('channel_id')
             
-            # STORY ACCESS
             if 'story_name' in data:
                 markup.add(InlineKeyboardButton(f"💳 ʙᴜʏ ɴᴏᴡ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
                 display_name = data['story_name']
                 header = "🎬 <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ</b>"
-            
-            # CHANNEL ACCESS
             else:
                 for p_time, p_price in data['plans'].items():
                     markup.add(InlineKeyboardButton(f"💳 {get_time_string(p_time)} - ₹{p_price}", callback_data=f"select_{db_id}_{p_time}"))
@@ -92,7 +83,6 @@ def start_handler(message):
                 f"➔ Please niche diye gaye plans mein se ek select karein:"
             )
             
-            # PHOTO CHECK: Agar database me photo ki file_id hai toh Photo + Caption bhejega
             photo_id = data.get('file_id')
             if photo_id:
                 return bot.send_photo(message.chat.id, photo=photo_id, caption=premium_text, reply_markup=markup, parse_mode="HTML")
@@ -101,7 +91,6 @@ def start_handler(message):
 
     # ─── 2. MAIN DASHBOARD ───
     markup = InlineKeyboardMarkup(row_width=2)
-    
     markup.add(InlineKeyboardButton("✨ ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀᴇ (ᴄʜᴇᴄᴋ sᴛᴏʀɪᴇs) ✨", callback_data="open_store"))
     
     markup.add(
@@ -130,6 +119,7 @@ def start_handler(message):
     )
     bot.send_message(message.chat.id, final_text, reply_markup=markup, parse_mode="HTML")
 
+
 # ─── 3. CALLBACK HANDLERS ───
 
 @bot.callback_query_handler(func=lambda call: call.data == "open_store")
@@ -144,18 +134,28 @@ def open_store_callback(call):
         "➔ 💎 = ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss\n\n"
         "Select karke apna access activate karein."
     )
-    # Store text layout change handle karne ke liye edit_message use kiya
-    bot.edit_message_text(store_text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+    
+    # ─── FIX: Agar menu kisi photo message se open hua hai toh edit_text fail hoga, isliye delete & send approach ───
+    if call.message.content_type == 'photo':
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except:
+            pass
+        bot.send_message(call.message.chat.id, store_text, reply_markup=markup, parse_mode="HTML")
+    else:
+        bot.edit_message_text(store_text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_start")
 def back_to_start_callback(call):
     bot.answer_callback_query(call.id)
-    # Purana koi bhi message (photo ya text) clear karke naya menu fresh bhejne ke liye delete logic
+    # Purana message clear karke naya message fresh bhejna sabse safe hai
     try:
         bot.delete_message(call.message.chat.id, call.message.message_id)
     except:
         pass
     start_handler(call.message)
+
 
 @bot.callback_query_handler(func=lambda call: call.data == "my_plan")
 def my_plan_callback(call):
