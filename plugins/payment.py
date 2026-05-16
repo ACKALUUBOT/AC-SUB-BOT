@@ -21,7 +21,7 @@ def send_home_menu(chat_id):
     )
 
 
-# --- 1. PAYMENT SELECTION (FIXED FOR PHOTO SUPPORT) ---
+# --- 1. PAYMENT SELECTION (FIXED FOR COMBO, STORY & PHOTO SUPPORT) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('select_'))
 def confirm_step(call):
     parts = call.data.split('_')
@@ -31,10 +31,18 @@ def confirm_step(call):
            channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
     
     if not data: 
-        return bot.answer_callback_query(call.id, "❌ Data not found!")
+        return bot.answer_callback_query(call.id, "❌ Data not found!", show_alert=True)
 
-    price = data['price'] if 'story_name' in data else data['plans'].get(mins, "0")
-    display_name = data.get('story_name') or data.get('name')
+    # Dynamic Pricing & Name selection for all 3 categories
+    if data.get('is_combo'):
+        price = data['price']
+        display_name = data.get('combo_name', 'Premium Combo')
+    elif 'story_name' in data:
+        price = data['price']
+        display_name = data.get('story_name')
+    else:
+        price = data['plans'].get(mins, "0")
+        display_name = data.get('name')
     
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -66,7 +74,15 @@ def manual_pay(call):
     data = channels_col.find_one({"item_id": item_id}) or \
            channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
     
-    price = data['price'] if 'story_name' in data else data['plans'].get(mins, "0")
+    if not data:
+        return bot.answer_callback_query(call.id, "❌ Data Error!", show_alert=True)
+
+    # Combo vs Story vs Channel pricing fetch
+    if data.get('is_combo') or 'story_name' in data:
+        price = data['price']
+    else:
+        price = data['plans'].get(mins, "0")
+        
     upi_string = f"upi://pay?pa={config.UPI_ID}&am={price}&cu=INR&tn=Pay_{item_id}"
     qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=350x350&data={urllib.parse.quote(upi_string)}"
     
@@ -125,8 +141,11 @@ def send_request_to_admin(message, item_id, mins):
     data = channels_col.find_one({"item_id": item_id}) or \
            channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
     
-    display_name = data.get('story_name') or data.get('name')
-    bot.send_message(message.chat.id, "⏳ <b><b>ʀᴇǫᴜᴇsᴛ sᴇɴᴛ!</b></b>\nAdmin check karke aapka access on kar dega.")
+    if not data:
+        return bot.send_message(message.chat.id, "❌ Something went wrong, item not found!")
+
+    display_name = data.get('combo_name') or data.get('story_name') or data.get('name')
+    bot.send_message(message.chat.id, "⏳ <b>ʀᴇǫᴜᴇsᴛ sᴇɴᴛ!</b>\nAdmin check karke aapka access on kar dega.")
     
     markup = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("✅ Approve", callback_data=f"app_{message.from_user.id}_{item_id}_{mins}"),
@@ -148,7 +167,7 @@ def process_inline_cancel(call):
     return send_home_menu(call.message.chat.id)
 
 
-# --- 4. ADMIN APPROVAL (With Automatic Single-Use Link) ---
+# --- 4. ADMIN APPROVAL (UPDATED WITH MULTI-ID COMBO LINKS SUPPORT) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('app_'))
 def admin_approve(call):
     _, u_id, item_id, mins = call.data.split('_')
@@ -156,27 +175,54 @@ def admin_approve(call):
     data = channels_col.find_one({"item_id": item_id}) or \
            channels_col.find_one({"channel_id": int(item_id) if item_id.replace('-','').isdigit() else 0})
     
-    if not data: return
+    if not data: 
+        return bot.answer_callback_query(call.id, "❌ Data not found on Approval!", show_alert=True)
     
     expiry = int(time.time()) + (int(mins) * 60) if mins != 'manual' else int(time.time()) + (365*24*60*60)
-    users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
+    markup = InlineKeyboardMarkup(row_width=1)
 
-    markup = InlineKeyboardMarkup()
-    if 'story_name' not in data and 'channel_id' in data:
+    # ─── CASE A: COMBO PACK APPROVAL (Multi-Channels Loop) ───
+    if data.get('is_combo') and 'channels_list' in data:
+        msg = "🎁 <b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋ ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nAapko sabhi linked channels ka access de diya gaya hai. Niche diye buttons se join karein:\n\n"
+        
+        for ch_id in data['channels_list']:
+            # Database me individual channel ki expiry daalo
+            users_col.update_one({"user_id": int(u_id), "channel_id": int(ch_id)}, {"$set": {"expiry": expiry}}, upsert=True)
+            try:
+                # Har channel ka individual single-use link nikalo
+                invite = bot.create_chat_invite_link(int(ch_id), member_limit=1)
+                
+                # Channel ka naam dhoodho buttons par lagane ke liye
+                ch_info = channels_col.find_one({"channel_id": int(ch_id)})
+                ch_title = ch_info.get('name') or ch_info.get('story_name') if ch_info else f"VIP Channel {ch_id}"
+                
+                markup.add(InlineKeyboardButton(f"📢 Join: {ch_title}", url=invite.invite_link))
+            except Exception as e:
+                print(f"Combo Link Gen Error for {ch_id}: {e}")
+                
+        msg += "⚠️ <i>Sabhi links single-use hain, ek baar join hone ke baad automatic expire ho jayengi!</i>"
+
+    # ─── CASE B: VIP CHANNEL APPROVAL (Single Channel Link) ───
+    elif 'story_name' not in data and 'channel_id' in data:
+        users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
         try:
             invite = bot.create_chat_invite_link(data['channel_id'], member_limit=1)
             markup.add(InlineKeyboardButton("📢 Join Channel", url=invite.invite_link))
             msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nChannel join karne ke liye niche click karein:\n\n⚠️ <i>Yeh link single use hai, ek baar join hone ke baad automatic expire ho jayegi!</i>"
         except: 
             msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\nBot invite link generate nahi kar saka, admin se contact karein."
+
+    # ─── CASE C: SINGLE STORY APPROVAL (Bot Link) ───
     else:
+        users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
         markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀỹ", url=data['bot_link']))
         msg = f"✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nStory: <b>{data['story_name']}</b>\nNiche button se access karein:"
 
     try:
         bot.send_message(u_id, msg, reply_markup=markup, parse_mode="HTML", protect_content=True)
-    except:
-        pass
+    except Exception as e:
+        print(f"Failed to deliver approval message to user {u_id}: {e}")
+        
     bot.edit_message_caption(f"✅ Approved for User: {u_id}", call.message.chat.id, call.message.message_id)
 
 
@@ -192,20 +238,15 @@ def admin_reject(call):
 # ========================================================
 @bot.chat_member_handler()
 def handle_chat_member_updates(update):
-    """Jaise hi koi user channel join karega, yeh handler chalega aur link delete kar dega"""
     if update.chat.type != "channel":
         return
 
-    # Check: Naya status member hai aur purana status member nahi tha
     if update.new_chat_member.status == "member" and update.old_chat_member.status in ["left", "kicked", "restricted"]:
-        
-        # Check: Kya user kisi invite link se aaya hai?
         if update.invite_link and update.invite_link.invite_link:
             used_link = update.invite_link.invite_link
             channel_id = update.chat.id
             
             try:
-                # Link ko Telegram server se completely delete (revoke) kar do
                 bot.revoke_chat_invite_link(chat_id=channel_id, invite_link=used_link)
                 print(f"[SUCCESS] Link Revoked and Deleted: {used_link}")
             except Exception as e:
