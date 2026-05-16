@@ -7,11 +7,11 @@ import config
 # --- ADMIN BUTTON SE DIRECT CALL HONE WALA FUNCTION ---
 @bot.message_handler(commands=['add_story'])
 def start_add_story(message):
-    if message.from_user.id != config.ADMIN_ID: return
+    if message.from_user.id != config.ADMIN_ID: 
+        return
     
     chat_id = message.chat.id
     
-    # Message thoda modify kiya taaki admin ko pata chale ki photo bhi support hai
     msg = bot.send_message(
         chat_id, 
         "🎬 <b>sᴛᴏʀʏ sᴇᴛᴜᴘ:</b>\n\n"
@@ -19,10 +19,12 @@ def start_add_story(message):
         "<i>(Aap direct <b>Photo</b> bhi bhej sakte hain, bas uske <b>Caption</b> mein Story ka naam likh dein)</i>", 
         parse_mode="HTML"
     )
+    # CRITICAL FIX: content_types specify karna zaroori hai taaki photo bypass na ho
     bot.register_next_step_handler(msg, get_story_name)
 
 def get_story_name(message):
-    if message.text == "/cancel": 
+    # Agar user ne text bheja hai aur cancel kiya hai
+    if message.text and message.text == "/cancel": 
         return bot.send_message(message.chat.id, "❌ Setup cancelled.")
     
     story_name = None
@@ -31,7 +33,6 @@ def get_story_name(message):
     # CASE 1: Agar admin ne direct photo bheji hai caption ke sath
     if message.photo:
         file_id = message.photo[-1].file_id  # High quality photo ki file_id
-        # Caption ki pehli line ko story name banaenge
         story_name = message.caption.split("\n")[0] if message.caption else "Untitled Story"
     
     # CASE 2: Agar admin ne normal text bheja hai
@@ -39,27 +40,31 @@ def get_story_name(message):
         story_name = message.text
     
     else:
-        # Agar na text hai na photo (jaise sticker ya document)
+        # Fallback agar media galat format me ho
         msg = bot.send_message(message.chat.id, "❌ Please ek valid text naam ya photo bhejein:")
         bot.register_next_step_handler(msg, get_story_name)
         return
 
-    msg = bot.send_message(message.chat.id, "🔗 <b>ᴅᴇᴍᴏ ʟɪɴᴋ:</b>\nDemo channel ya video link dein (Ya 'skip' likhein):")
-    # file_id ko pipeline mein aage pass kar rahe hain
+    msg = bot.send_message(message.chat.id, "🔗 <b><b>ᴅᴇᴍᴏ ʟɪɴᴋ:</b></b>\nDemo channel ya video link dein (Ya 'skip' likhein):")
     bot.register_next_step_handler(msg, get_demo_link, story_name, file_id)
 
 def get_demo_link(message, story_name, file_id):
-    demo = None if message.text.lower() == 'skip' else message.text
-    msg = bot.send_message(message.chat.id, "🤖 <b>ғɪɴᴀʟ ʙᴏᴛ ʟɪɴᴋ:</b>\nPayment ke baad milne wala main link dein:")
+    if message.text and message.text.lower() == 'skip':
+        demo = None
+    else:
+        demo = message.text
+        
+    msg = bot.send_message(message.chat.id, "🤖 <b><b>ғɪɴᴀʟ ʙᴏᴛ ʟɪɴᴋ:</b></b>\nPayment ke baad milne wala main link dein:")
     bot.register_next_step_handler(msg, get_final_link, story_name, demo, file_id)
 
 def get_final_link(message, story_name, demo, file_id):
     final_link = message.text
-    msg = bot.send_message(message.chat.id, "💰 <b>ᴘʀɪᴄᴇ:</b>\nSirf number likhein (Example: 49):")
+    msg = bot.send_message(message.chat.id, "💰 <b><b>ᴘʀɪᴄᴇ:</b></b>\nSirf number likhein (Example: 49):")
     bot.register_next_step_handler(msg, save_story, story_name, demo, final_link, file_id)
 
 def save_story(message, story_name, demo, final_link, file_id):
-    if not message.text.isdigit():
+    # Safety Check: Agar input number nahi hai
+    if not message.text or not message.text.isdigit():
         msg = bot.send_message(message.chat.id, "❌ Price sirf number mein likhein:")
         bot.register_next_step_handler(msg, save_story, story_name, demo, final_link, file_id)
         return
@@ -67,14 +72,14 @@ def save_story(message, story_name, demo, final_link, file_id):
     price = message.text
     story_id = str(uuid.uuid4())[:10] 
     
-    # Database Entry me 'file_id' add kiya gaya hai
+    # Database document push
     channels_col.insert_one({
         "item_id": story_id,
         "story_name": story_name,
         "demo_link": demo,
         "bot_link": final_link,
         "price": price,
-        "file_id": file_id, # Agar photo nahi hogi toh automatic None save hoga
+        "file_id": file_id, 
         "type": "story" 
     })
     
@@ -92,7 +97,7 @@ def save_story(message, story_name, demo, final_link, file_id):
         f"➔ Is link ko copy karke promote karein."
     )
     
-    # Final confirmation mein bhi agar photo hai toh photo ke sath confirmation bhejega
+    # Final template response delivery handler based on image availability
     if file_id:
         bot.send_photo(message.chat.id, photo=file_id, caption=res, parse_mode="HTML")
     else:
