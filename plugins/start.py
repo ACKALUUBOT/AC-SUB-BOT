@@ -1,3 +1,4 @@
+import uuid
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils import bot, get_time_string
 from database import channels_col, users_col
@@ -55,7 +56,7 @@ def start_handler(message):
     user_id = message.from_user.id
     text = message.text.split()
 
-    # ─── 1. DEEP LINK ENTRY (STORY & CHANNEL) ───
+    # ─── 1. DEEP LINK ENTRY (STORY & CHANNEL) WITH PHOTO SUPPORT ───
     if len(text) > 1:
         param = text[1]
         # Database check: item_id ya channel_id dono ke liye
@@ -90,7 +91,13 @@ def start_handler(message):
                 f"📦 ɴᴀᴍᴇ: <b>{display_name}</b>\n\n"
                 f"➔ Please niche diye gaye plans mein se ek select karein:"
             )
-            return bot.send_message(message.chat.id, premium_text, reply_markup=markup, parse_mode="HTML")
+            
+            # PHOTO CHECK: Agar database me photo ki file_id hai toh Photo + Caption bhejega
+            photo_id = data.get('file_id')
+            if photo_id:
+                return bot.send_photo(message.chat.id, photo=photo_id, caption=premium_text, reply_markup=markup, parse_mode="HTML")
+            else:
+                return bot.send_message(message.chat.id, premium_text, reply_markup=markup, parse_mode="HTML")
 
     # ─── 2. MAIN DASHBOARD ───
     markup = InlineKeyboardMarkup(row_width=2)
@@ -137,12 +144,17 @@ def open_store_callback(call):
         "➔ 💎 = ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss\n\n"
         "Select karke apna access activate karein."
     )
+    # Store text layout change handle karne ke liye edit_message use kiya
     bot.edit_message_text(store_text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_start")
 def back_to_start_callback(call):
     bot.answer_callback_query(call.id)
-    bot.delete_message(call.message.chat.id, call.message.message_id)
+    # Purana koi bhi message (photo ya text) clear karke naya menu fresh bhejne ke liye delete logic
+    try:
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    except:
+        pass
     start_handler(call.message)
 
 @bot.callback_query_handler(func=lambda call: call.data == "my_plan")
@@ -178,7 +190,6 @@ def my_plan_callback(call):
 
 @bot.message_handler(commands=['delete'])
 def delete_item_handler(message):
-    # Sirf Admin hi delete kar sake
     if message.from_user.id != config.ADMIN_ID:
         return bot.reply_to(message, "❌ Aapke paas iska access nahi hai.")
 
@@ -188,7 +199,6 @@ def delete_item_handler(message):
 
     target_id = text[1]
 
-    # Database se delete karne ki koshish (item_id ya channel_id dono check karega)
     result = channels_col.delete_one({
         "$or": [
             {"item_id": target_id},
@@ -200,4 +210,3 @@ def delete_item_handler(message):
         bot.reply_to(message, f"✅ <b>Success:</b> Item <code>{target_id}</code> database se hata diya gaya hai.")
     else:
         bot.reply_to(message, f"❌ <b>Error:</b> Database mein <code>{target_id}</code> naam ki koi ID nahi mili.")
-        
