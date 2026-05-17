@@ -9,24 +9,27 @@ def get_categories_markup():
     markup.add(
         types.KeyboardButton("✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs"),
         types.KeyboardButton("🔥 ᴘᴏᴄᴋᴇᴛ ғᴍ sᴛᴏʀɪᴇs"),
-        types.KeyboardButton("🎁 SPECIAL COMBO PACKS (BIG SAVE)"), # Combo button wapas add ho gaya
+        types.KeyboardButton("🎁 SPECIAL COMBO PACKS (BIG SAVE)"),
         types.KeyboardButton("« BACK TO MENU")
     )
     return markup
 
 
-# ─── 2. PAGINATED ITEMS MENU BY CATEGORY (DYNAMIC FILTER) ───
+# ─── 2. PAGINATED ITEMS MENU BY CATEGORY (DYNAMIC FILTER FIXED) ───
 def get_items_by_category_markup(category_type, bot_username=None, page=1):
     """Source aur combo ke hisab se database se items filter karega (8 items per page)"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     
-    # 🌟 DATABASE DATABASE FETCH FILTER
+    # 🌟 REAL-TIME DATABASE FETCH FILTER
     if category_type == "pratilipi":
+        # Strict filter for pratilipi stories (excluding combos)
         all_items = list(channels_col.find({"story_name": {"$exists": True}, "source": "pratilipi", "is_combo": {"$exists": False}}))
     elif category_type == "pocket":
+        # Strict filter for pocket stories (excluding combos)
         all_items = list(channels_col.find({"story_name": {"$exists": True}, "source": "pocket", "is_combo": {"$exists": False}}))
     elif category_type == "combo":
-        all_items = list(channels_col.find({"is_combo": True})) # Combo packs ka alag query filter
+        # Pure filter for registered combo bundles only
+        all_items = list(channels_col.find({"is_combo": True}))
     else:
         all_items = []
         
@@ -47,16 +50,18 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
     end_idx = start_idx + per_page
     sliced_items = all_items[start_idx:end_idx]
 
-    # Buttons display generation loop
+    # Buttons display generation loop (Aligned with start.py item selection handler)
     for index, item in enumerate(sliced_items, start=start_idx + 1):
         if category_type == "combo":
+            # Aligned with split pattern: "🎁 " handling
             btn_text = f"🎁 {item['combo_name']} ➔ [ ₹{item['price']} ]"
         else:
+            # Aligned with split pattern: "{index}. {story_name}" handling
             btn_text = f"{index}. {item['story_name']} [ ₹{item['price']} ]"
             
         markup.add(types.KeyboardButton(btn_text))
             
-    # Navigation Row (Next/Prev)
+    # Navigation Row (Next/Prev Setup)
     nav_buttons = []
     if page > 1:
         nav_buttons.append(types.KeyboardButton("‹ PREV"))
@@ -74,7 +79,7 @@ def get_items_by_category_markup(category_type, bot_username=None, page=1):
 # ─── 3. TEXT FOR CATEGORIES PAGE ───
 def get_store_text():
     return (
-        "🛍️ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀʏ ᴄᴀᴛᴇɢᴏʀɪᴇs</b> 🛍️\n"
+        "🛍️ <b>ᴘʀᴇᴍɪᴜᴍ sᴛᴏʀỹ ᴄᴀᴛᴇɢᴏʀɪᴇs</b> 🛍️\n"
         "──────────────────────────\n"
         "ᴀᴀᴘ ᴋɪs ᴘʟᴀᴛғᴏʀᴍ ᴋɪ sᴛᴏʀɪᴇs ᴅᴇᴋʜɴᴀ ᴄʜᴀʜᴛᴇ ʜᴀɪɴ? ɴɪᴄʜᴇ sᴇ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:\n\n"
         "✨ <b>ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs:</b> sᴇʟᴇᴄᴛ ᴛᴏ ᴠɪᴇᴡ ᴀʟʟ ᴘʀᴀᴛɪʟɪᴘɪ sᴛᴏʀɪᴇs.\n"
