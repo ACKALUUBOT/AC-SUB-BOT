@@ -204,8 +204,8 @@ def channel_ask_category(message, ch_id, ch_name, validity_days, price, file_id)
     
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{state_id}"),
-        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{state_id}")
+        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{story_id}"),
+        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{story_id}")
     )
     bot.send_message(
         message.chat.id, 
@@ -264,3 +264,123 @@ def handle_category_selection(call):
         f"🔗 <b>link:</b> <code>{bot_link}</code>", 
         parse_mode="HTML"
     )
+
+# ==========================================
+# --- 5. STANDALONE MANUAL COMBO FLOW ---
+# ==========================================
+@bot.message_handler(commands=['add_combo'], func=lambda m: m.from_user.id == config.ADMIN_ID)
+def add_combo_start(message):
+    chat_id = get_chat_id(message)
+    if not chat_id: return
+    
+    msg = bot.send_message(
+        chat_id, 
+        "🎁 <b>ᴍ_ᴀ_ɴ_ᴜ_ᴀ_ʟ  ᴄ_ᴏ_ᴍ_ʙ_ᴏ  s_ᴇ_ᴛ_ᴜ_ᴘ:</b>\n\n"
+        "➔ Apne Premium Combo Bundle ka ek mast <b>Naam (Title)</b> likh kar bhejiye:", 
+        parse_mode="HTML"
+    )
+    bot.register_next_step_handler(msg, combo_ask_validity)
+
+def combo_ask_validity(message):
+    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
+    combo_name = message.text.strip()
+    
+    msg = bot.send_message(
+        message.chat.id,
+        f"⏱️ <b>⏳ ᴠᴀʟɪᴅɪᴛʏ:</b>\n"
+        f"Yeh combo pack kitne din tak valid rakhna hai? (Sirf numbers likhein, jaise: 30):",
+        parse_mode="HTML"
+    )
+    bot.register_next_step_handler(msg, combo_ask_price, combo_name)
+
+def combo_ask_price(message, combo_name):
+    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
+    validity_days = message.text.strip()
+    
+    msg = bot.send_message(
+        message.chat.id,
+        f"💰 <b>ᴘʀɪᴄɪɴɢ:</b>\n"
+        f"Is combo pack ke liye total <b>Price (₹)</b> kitna rakhna hai? (Sirf numbers, jaise: 199):",
+        parse_mode="HTML"
+    )
+    bot.register_next_step_handler(msg, combo_ask_photo, combo_name, validity_days)
+
+def combo_ask_photo(message, combo_name, validity_days):
+    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
+    price = message.text.strip()
+    
+    msg = bot.send_message(
+        message.chat.id,
+        "🖼️ <b>ᴄᴏᴍʙᴏ ᴘʜᴏᴛᴏ:</b>\n"
+        "Kya aap is combo banner ke liye koi custom photo lagana chahte hain?\n\n"
+        "➔ Ek <b>Photo</b> bhejein.\n"
+        "➔ Ya bina photo ke aage badhne ke liye <code>skip</code> likhein:",
+        parse_mode="HTML"
+    )
+    bot.register_next_step_handler(msg, combo_ask_demo, combo_name, validity_days, price)
+
+def combo_ask_demo(message, combo_name, validity_days, price):
+    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
+    file_id = message.photo[-1].file_id if message.photo else None
+    
+    msg = bot.send_message(message.chat.id, "🔗 <b>Demo Link bhejein</b> (Ya 'skip' ya 'none' likhein):")
+    bot.register_next_step_handler(msg, combo_ask_channels, combo_name, validity_days, price, file_id)
+
+def combo_ask_channels(message, combo_name, validity_days, price, file_id):
+    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
+    demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
+    
+    msg = bot.send_message(
+        message.chat.id,
+        "🆔 <b>ᴄʜᴀɴɴᴇʟ ɪᴅs ʟɪsᴛ:</b>\n"
+        "Is combo bundle ke andar jo-jo channels jodhne hain, unki <b>Base IDs</b> comma ( , ) laga kar ek sath bhejiye:\n\n"
+        "➔ <code>-100123456789,-100987654321</code>",
+        parse_mode="HTML"
+    )
+    bot.register_next_step_handler(msg, save_manual_combo, combo_name, validity_days, price, file_id, demo)
+
+def save_manual_combo(message, combo_name, validity_days, price, file_id, demo):
+    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
+    raw_ids = message.text.strip().replace(" ", "")
+    
+    try:
+        # Comma separated IDs ko extract karke integer list me map karna
+        channel_ids_list = [int(cid) for cid in raw_ids.split(",") if cid]
+    except ValueError:
+        msg = bot.send_message(message.chat.id, "❌ <b>Format Error!</b> Keval IDs aur comma ka use karein. Dobara valid IDs bhejein:")
+        return bot.register_next_step_handler(msg, save_manual_combo, combo_name, validity_days, price, file_id, demo)
+
+    item_id = f"combo_{str(uuid.uuid4())[:10]}"
+    
+    # Final database record write with 'type': 'combo' and source locked as 'combo'
+    channels_col.insert_one({
+        "item_id": item_id,
+        "name": combo_name,
+        "validity": validity_days,
+        "price": price,
+        "file_id": file_id,
+        "demo_link": demo,
+        "channels_list": channel_ids_list,
+        "source": "combo",
+        "type": "combo"
+    })
+    
+    bot_user = bot.get_me().username
+    bot_link = f"https://t.me/{bot_user}?start={item_id}"
+    
+    success_text = (
+        f"✅ <b>ᴄᴏᴍʙᴏ  sᴇᴛᴜᴘ  ꜰɪɴɪsʜᴇᴅ!</b>\n\n"
+        f"🎁 <b>ᴄᴏᴍʙᴏ:</b> <code>{combo_name}</code>\n"
+        f"📂 <b>source:</b> <code>combo</code>\n"
+        f"⏱️ <b>validity:</b> {validity_days} Din\n"
+        f"💰 <b>price:</b> ₹{price}\n"
+        f"📊 <b>ᴄʜᴀɴɴᴇʟs:</b> {len(channel_ids_list)} Linked\n"
+        f"📺 <b>demo:</b> {demo if demo else 'None'}\n\n"
+        f"🔗 <b>ʟɪɴᴋ:</b> <code>{bot_link}</code>"
+    )
+    
+    if file_id:
+        bot.send_photo(message.chat.id, photo=file_id, caption=success_text, parse_mode="HTML")
+    else:
+        bot.
+    
