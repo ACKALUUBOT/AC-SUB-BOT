@@ -105,7 +105,7 @@ def manual_pay(call):
     else:
         try: bot.delete_message(call.message.chat.id, call.message.message_id)
         except: pass
-        bot.send_message(call.message.chat.id, f"📲 <b>ᴜᴘɪ ɪᴅ:</b> <code>{config.UPI_ID}</code>\nAmount: <b>₹{price}</b>\n\n➔ Pay karne ke baad niche button dabayein.", reply_markup=markup, reply_markup=markup, parse_mode="HTML")
+        bot.send_message(call.message.chat.id, f"📲 <b>ᴜᴘɪ ɪᴅ:</b> <code>{config.UPI_ID}</code>\nAmount: <b>₹{price}</b>\n\n➔ Pay karne ke baad niche button dabayein.", reply_markup=markup, parse_mode="HTML")
 
 
 # --- 3. DIRECT SCREENSHOT SUBMISSION ---
