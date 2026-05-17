@@ -105,10 +105,8 @@ def manage_ch(call):
         bot.send_message(call.message.chat.id, text=text, parse_mode="HTML")
 
 
-      
-
 # =====================================================================
-# ─── 3. CLEAN SINGLE-FLOW WITH DEMO SKIP BUG FIXED (/add) ───
+# ─── 3. FORWARD CHANNEL STORY FLOW (/add) ───
 # =====================================================================
 @bot.message_handler(commands=['add'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def add_start(message):
@@ -184,8 +182,6 @@ def channel_ask_photo(message, ch_id, ch_name, validity_days):
 
 def channel_ask_demo(message, ch_id, ch_name, validity_days, price):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    
-    # Check if photo forwarded or admin typed skip
     file_id = message.photo[-1].file_id if message.photo else None
     
     msg = bot.send_message(message.chat.id, "🔗 <b>Demo Link bhejein</b> (Ya 'skip' ya 'none' likhein):")
@@ -194,24 +190,23 @@ def channel_ask_demo(message, ch_id, ch_name, validity_days, price):
 def channel_ask_category(message, ch_id, ch_name, validity_days, price, file_id):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
     
-    # DEMO SKIP BUG FIXED: Direct checking clean text mapping
     raw_text = message.text.strip() if message.text else ""
     demo = None if raw_text.lower() in ['none', 'skip', ''] else raw_text
     
     state_id = str(uuid.uuid4())[:8]
     pending_setups[state_id] = {
-        "ch_id": ch_id, 
-        "ch_name": ch_name,
-        "validity_days": validity_days, 
-        "price": price,
+        "ch_id": int(ch_id), 
+        "ch_name": str(ch_name),
+        "validity_days": str(validity_days), 
+        "price": str(price),
         "file_id": file_id,
         "demo_link": demo
     }
     
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{story_id}"),
-        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{story_id}")
+        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{state_id}"),
+        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{state_id}")
     )
     bot.send_message(
         message.chat.id, 
@@ -222,7 +217,7 @@ def channel_ask_category(message, ch_id, ch_name, validity_days, price, file_id)
 
 
 # =====================================================================
-# ─── 4. CALLBACK & FINAL SAVE (ALIGNED WITH store.py SCHEMA) ───
+# ─── 4. CALLBACK & FINAL SAVE (STRICT FOR FORWARDED STORIES) ───
 # =====================================================================
 @bot.callback_query_handler(func=lambda call: call.data.startswith('newsrc_'))
 def handle_category_selection(call):
@@ -241,19 +236,23 @@ def handle_category_selection(call):
     
     item_id = str(uuid.uuid4())[:10]
     
-    # 🌟 SAVING EXACTLY MATCHING store.py FILTERS (story_name used)
+    # 🌟 STRICT SAVE: Item_id par strict indexing ki taaki store aur payment sync perfect chale
     channels_col.update_one(
-        {"channel_id": data["ch_id"]}, 
+        {"item_id": item_id}, 
         {"$set": {
             "item_id": item_id,
+            "channel_id": data["ch_id"],
             "name": data["ch_name"], 
-            "story_name": data["ch_name"], # Required by store.py filter logic
+            "story_name": data["ch_name"], # store.py list matching criteria
             "validity": data["validity_days"], 
-            "price": data["price"],        # Added dynamically as numbers/string
+            "price": data["price"],        
             "file_id": data["file_id"],
             "demo_link": data["demo_link"],
-            "source": platform, 
+            "source": platform,            # Pocket or Pratilipi selection
             "type": "channel"
+        },
+        "$unset": {
+            "is_combo": ""                 # Combo criteria explicitly deleted for single entries
         }}, 
         upsert=True
     )
@@ -262,20 +261,26 @@ def handle_category_selection(call):
     
     bot_user = bot.get_me().username
     bot_link = f"https://t.me/{bot_user}?start={item_id}"
-    bot.send_message(
-        call.message.chat.id, 
-        f"✅ <b>sᴛᴏʀỹ  sᴇᴛᴜᴘ  ғɪɴɪsʜᴇᴅ!</b>\n\n"
-        f"📂 <b>source:</b> {platform}\n"
+    
+    success_text = (
+        f"✅ <b>sᴛᴏʀỹ  sᴇᴛᴜᴘ  ғɪɴɪsʜᴇᴅ!</b>\n"
+        f"──────────────────────────\n"
+        f"📂 <b>source:</b> <code>{platform}</code>\n"
         f"⏱️ <b>validity:</b> {data['validity_days']} Din\n"
         f"💰 <b>price:</b> ₹{data['price']}\n"
-        f"📺 <b>demo:</b> {data['demo_link'] if data['demo_link'] else 'None'}\n"
-        f"🔗 <b>link:</b> <code>{bot_link}</code>", 
-        parse_mode="HTML"
+        f"📺 <b>demo:</b> {data['demo_link'] if data['demo_link'] else 'None'}\n\n"
+        f"🔗 <b>sʜᴀʀᴇ ʟɪɴᴋ (ꜰᴏʀ ᴜsᴇʀs):</b>\n<code>{bot_link}</code>\n"
+        f"──────────────────────────"
     )
+    
+    if data["file_id"]:
+        bot.send_photo(call.message.chat.id, photo=data["file_id"], caption=success_text, parse_mode="HTML")
+    else:
+        bot.send_message(call.message.chat.id, text=success_text, parse_mode="HTML")
 
 
 # =====================================================================
-# ─── 5. STANDALONE MANUAL COMBO FIXED (100% SYNCED WITH store.py) ───
+# ─── 5. STANDALONE MANUAL COMBO FLOW (/add_combo) ───
 # =====================================================================
 @bot.message_handler(commands=['add_combo'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def add_combo_start(message):
@@ -300,7 +305,7 @@ def combo_ask_validity(message):
         "Yeh combo bundle kitne din tak valid rahega? (Jaise: 30):",
         parse_mode="HTML"
     )
-    bot.register_next_step_handler(msg, combo_ask_price, combo_name)
+    bot.register_next_step_handler(combo_ask_price, combo_name)
 
 def combo_ask_price(message, combo_name):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
@@ -362,18 +367,17 @@ def save_manual_combo_fixed(message, combo_name, validity_days, price, file_id, 
 
     item_id = f"combo_{str(uuid.uuid4())[:10]}"
     
-    # 🌟 SCHEMA ALIGNED 100% WITH store.py COMBO FILTER FIXED 
     channels_col.insert_one({
         "item_id": item_id,
         "name": combo_name,
-        "combo_name": combo_name,       # Required by store.py: item['combo_name']
-        "is_combo": True,               # Required by store.py: {"is_combo": True}
+        "combo_name": combo_name,       
+        "is_combo": True,               
         "validity": validity_days,
-        "price": price,                 # Aligned with [ ₹{item['price']} ] display
+        "price": price,                 
         "file_id": file_id,
         "demo_link": demo,
         "channels_list": channel_ids_list,
-        "source": "combo",              # Clean mapping anchor
+        "source": "combo",              
         "type": "combo"
     })
     
@@ -385,7 +389,7 @@ def save_manual_combo_fixed(message, combo_name, validity_days, price, file_id, 
         f"──────────────────────────\n"
         f"🎁 <b>ᴄᴏᴍʙᴏ ɴᴀᴍᴇ:</b> <code>{combo_name}</code>\n"
         f"⏱️ <b>ᴠᴀʟɪᴅɪᴛʏ:</b> {validity_days} Din\n"
-        f"💰 <b>ᴘʀɪᴄᴇ:</b> ₹{price}\n"
+        f"💰 <b>ᴘʀɪᴄɪɴɢ:</b> ₹{price}\n"
         f"📊 <b>ᴄʜᴀɴɴᴇʟs:</b> {len(channel_ids_list)} Linked\n\n"
         f"🔗 <b>sʜᴀʀᴇ ʟɪɴᴋ (ᴜsᴇʀs):</b>\n<code>{bot_link}</code>\n"
         f"──────────────────────────"
@@ -395,4 +399,3 @@ def save_manual_combo_fixed(message, combo_name, validity_days, price, file_id, 
         bot.send_photo(message.chat.id, photo=file_id, caption=success_text, parse_mode="HTML")
     else:
         bot.send_message(message.chat.id, text=success_text, parse_mode="HTML")
-    
