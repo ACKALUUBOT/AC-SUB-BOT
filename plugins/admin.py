@@ -58,11 +58,11 @@ def list_channels(message):
     cursor = channels_col.find()
     markup = InlineKeyboardMarkup()
     for ch in cursor:
-        name = ch.get('story_name') or ch.get('name') or "Unnamed Item"
+        name = ch.get('name') or "Unnamed Item"
         markup.add(InlineKeyboardButton(f"⚙️ Manage: {name}", callback_data=f"manage_{ch['item_id']}"))
         
     if markup.keyboard:
-        bot.send_message(chat_id, "📑 <b>ʏᴏᴜʀ ɪɴᴠᴇɴᴛᴏʀʏ:</b>\nNiche kisi bhi item ko manage karein:", reply_markup=markup, parse_mode="HTML")
+        bot.send_message(chat_id, "📑 <b>ʏᴏᴜʀ  ɪɴᴠᴇɴᴛᴏʀʏ:</b>\nNiche kisi bhi item ko manage karein:", reply_markup=markup, parse_mode="HTML")
     else:
         bot.send_message(chat_id, "❌ Abhi koi item add nahi hai.")
 
@@ -78,17 +78,17 @@ def manage_ch(call):
 
     bot_user = bot.get_me().username
     link = f"https://t.me/{bot_user}?start={item_id}"
-    name = ch_data.get('story_name') or ch_data.get('name') or "Unnamed Item"
-    price_info = f"₹{ch_data['price']}" if 'story_name' in ch_data else ch_data.get('plans', 'N/A')
-    source_platform = ch_data.get('source', 'Not Specified') 
+    name = ch_data.get('name') or "Unnamed Item"
+    source_platform = ch_data.get('source', 'none') 
+    validity_info = ch_data.get('validity', 'N/A')
     
     text = (
         f"⚙️ <b>sᴇᴛᴛɪɴɢs:</b> {name}\n"
         f"────────────────────\n"
-        f"📂 <b>ᴄᴀᴛᴇɢᴏʀʏ:</b> {source_platform}\n"
-        f"🔗 <b>sʜᴀʀᴇ ʟɪɴᴋ:</b>\n<code>{link}</code>\n\n"
-        f"📺 <b>ᴅᴇᴍᴏ:</b> {ch_data.get('demo_link', 'None')}\n"
-        f"💰 <b>ᴘʟᴀɴs:</b> {price_info}\n"
+        f"📂 <b>source:</b> <code>{source_platform}</code>\n"
+        f"⏱️ <b>validity:</b> {validity_info} Din\n"
+        f"📺 <b>demo:</b> {ch_data.get('demo_link', 'None')}\n\n"
+        f"🔗 <b>sʜᴀʀᴇ ʟɪɴᴋ:</b>\n<code>{link}</code>\n"
         f"────────────────────"
     )
     try: 
@@ -104,7 +104,7 @@ def manage_ch(call):
 
 
 # ==========================================
-# --- 3. SEPARATE LOGIC CHANNELS & STORIES ---
+# --- 3. CLEAN SINGLE-FLOW WITH DEMO LINK ---
 # ==========================================
 @bot.message_handler(commands=['add'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def add_start(message):
@@ -113,9 +113,8 @@ def add_start(message):
     
     msg = bot.send_message(
         chat_id, 
-        "📢 <b>ᴀ_ᴅ_ᴅ  ɪ_ᴛ_ᴇ_ᴍ:</b>\n\n"
-        "➔ <b>Channel Setup:</b> Kisi channel ka koi post <b>Forward</b> karein.\n"
-        "➔ <b>Direct Photo Setup:</b> Ek <b>Photo</b> bhejein jiska <b>Caption</b> Story ka naam ho:", 
+        "📢 <b>ᴀ_ᴅ_ᴅ  <b>ᴄ_ʜ_ᴀ_ɴ__ɴ_ᴇ_ʟ</b>:</b>\n\n"
+        "➔ Jis channel ko add karna hai, us channel ka koi bhi ek post yahan <b>Forward</b> karein:", 
         parse_mode="HTML"
     )
     bot.register_next_step_handler(msg, route_setup_type)
@@ -124,182 +123,126 @@ def route_setup_type(message):
     if message.text == "/cancel":
         return bot.send_message(message.chat.id, "❌ Action cancelled.")
 
-    # [FLOW 1] CHANNEL FORWARD MODE
-    if message.forward_from_chat:
-        ch_id = message.forward_from_chat.id
-        ch_name = message.forward_from_chat.title
+    is_forwarded = (
+        message.forward_from_chat or 
+        message.forward_from or 
+        message.forward_date or 
+        hasattr(message, 'forward_signature')
+    )
+
+    if is_forwarded:
+        if message.forward_from_chat:
+            ch_id = message.forward_from_chat.id
+            ch_name = message.forward_from_chat.title
+        else:
+            ch_id = message.forward_from_chat.id if message.forward_from_chat else message.chat.id
+            ch_name = "Private/Hidden Channel"
         
         msg = bot.send_message(
             message.chat.id, 
-            f"✅ <b>Channel Detected:</b> {ch_name}\n\n"
-            f"Plans likhein (Format - Min:Price):\nExample: <code>1440:30, 10080:150</code>", 
+            f"✅ <b>Channel Detected:</b> {ch_name}\n"
+            f"🆔 <b>ID:</b> <code>{ch_id}</code>\n\n"
+            f"⏱️ <b>⏳ ᴠᴀʟɪᴅɪᴛʏ:</b>\n"
+            f"Yeh data kitne din tak valid rakhna hai? (Sirf numbers likhein, jaise: 30):", 
             parse_mode="HTML"
         )
         bot.register_next_step_handler(msg, channel_ask_photo, ch_id, ch_name)
-
-    # [FLOW 2] DIRECT PHOTO UPLOAD MODE
-    elif message.photo:
-        file_id = message.photo[-1].file_id
-        story_name = message.caption.split("\n")[0] if message.caption else "Untitled Story"
-        
-        msg = bot.send_message(
-            message.chat.id, 
-            f"🎬 <b>Story Detected:</b> {story_name}\n\n"
-            f"Is Story ka Price/Plan likhein (Example: 49):", 
-            parse_mode="HTML"
-        )
-        bot.register_next_step_handler(msg, story_ask_main_link, story_name, file_id)
         
     else:
-        msg = bot.send_message(message.chat.id, "❌ Galat input! Kripya post forward karein ya direct photo bhejein:")
+        msg = bot.send_message(message.chat.id, "❌ Galat Input! Kripya channel se post forward karein (ya /cancel):")
         bot.register_next_step_handler(msg, route_setup_type)
 
-
-# ─── FLOW 1: CHANNEL SETUP HANDLERS ───
 def channel_ask_photo(message, ch_id, ch_name):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    plans_data = message.text.strip()
+    validity_days = message.text.strip()
     
     msg = bot.send_message(
         message.chat.id, 
         "🖼️ <b>ᴄʜᴀɴɴᴇʟ ᴘʜᴏᴛᴏ:</b>\n"
         "Aap is channel ke liye koi custom photo lagana chahte hain?\n\n"
         "➔ Ek <b>Photo</b> bhejein.\n"
-        "➔ Ya bina photo ke save karne ke liye <code>skip</code> likhein:",
+        "➔ Ya bina photo ke aage badhne ke liye <code>skip</code> likhein:",
         parse_mode="HTML"
     )
-    bot.register_next_step_handler(msg, channel_ask_demo, ch_id, ch_name, plans_data)
+    bot.register_next_step_handler(msg, channel_ask_demo, ch_id, ch_name, validity_days)
 
-def channel_ask_demo(message, ch_id, ch_name, plans_data):
+def channel_ask_demo(message, ch_id, ch_name, validity_days):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
     file_id = message.photo[-1].file_id if message.photo else None
     
-    msg = bot.send_message(message.chat.id, "🔗 Demo Link bhejein (Ya 'skip' ya 'none' likhein):")
-    bot.register_next_step_handler(msg, channel_ask_source, ch_id, ch_name, plans_data, file_id)
+    msg = bot.send_message(message.chat.id, "🔗 <b>Demo Link bhejein</b> (Ya 'skip' ya 'none' likhein):")
+    bot.register_next_step_handler(msg, channel_ask_category, ch_id, ch_name, validity_days, file_id)
 
-def channel_ask_source(message, ch_id, ch_name, plans_data, file_id):
+def channel_ask_category(message, ch_id, ch_name, validity_days, file_id):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
     demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
     
     state_id = str(uuid.uuid4())[:8]
     pending_setups[state_id] = {
-        "type": "channel_flow", "ch_id": ch_id, "ch_name": ch_name,
-        "plans_data": plans_data, "file_id": file_id, "demo": demo
+        "ch_id": ch_id, 
+        "ch_name": ch_name,
+        "validity_days": validity_days, 
+        "file_id": file_id,
+        "demo_link": demo
     }
     
-    # Short names wale inline buttons
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("🎧 Pocket", callback_data=f"setsrc_pocket_{state_id}"),
-        InlineKeyboardButton("📚 Pratilipi", callback_data=f"setsrc_pratilipi_{state_id}")
+        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{state_id}"),
+        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{state_id}")
     )
-    bot.send_message(message.chat.id, "📂 <b>ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:</b>\nYeh Channel kis platform ka hai?", reply_markup=markup, parse_mode="HTML")
-
-
-# ─── FLOW 2: DIRECT PHOTO STORY HANDLERS ───
-def story_ask_main_link(message, story_name, file_id):
-    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    price = message.text.strip()
-    
-    msg = bot.send_message(
+    bot.send_message(
         message.chat.id, 
-        "🤖 <b>ғɪɴᴀʟ ᴀᴄᴄᴇss ʟɪɴᴋ:</b>\n"
-        "User ke payment approve hone par jo main link (Video ya Group) milna chahiye, woh link bhejein:"
+        "📂 <b>Select Category (small text):</b>", 
+        reply_markup=markup, 
+        parse_mode="HTML"
     )
-    bot.register_next_step_handler(msg, story_ask_demo, story_name, price, file_id)
-
-def story_ask_demo(message, story_name, price, file_id):
-    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    final_link = message.text.strip()
-    
-    msg = bot.send_message(message.chat.id, "🔗 Demo Link bhejein (Ya 'skip' ya 'none' likhein):")
-    bot.register_next_step_handler(msg, story_ask_source, story_name, price, final_link, file_id)
-
-def story_ask_source(message, story_name, price, final_link, file_id):
-    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
-    
-    state_id = str(uuid.uuid4())[:8]
-    pending_setups[state_id] = {
-        "type": "story_flow", "story_name": story_name, "price": price,
-        "final_link": final_link, "file_id": file_id, "demo": demo
-    }
-    
-    # Short names wale inline buttons
-    markup = InlineKeyboardMarkup()
-    markup.add(
-        InlineKeyboardButton("🎧 Pocket", callback_data=f"setsrc_pocket_{state_id}"),
-        InlineKeyboardButton("📚 Pratilipi", callback_data=f"setsrc_pratilipi_{state_id}")
-    )
-    bot.send_message(message.chat.id, "📂 <b>ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:</b>\nYeh Story kiski hai?", reply_markup=markup, parse_mode="HTML")
 
 
 # ==========================================
-# --- 4. UNIVERSAL CALLBACK HANDLER FOR SOURCE ---
+# --- 4. CALLBACK & FINAL DATABASE SAVE ---
 # ==========================================
-@bot.callback_query_handler(func=lambda call: call.data.startswith('setsrc_'))
-def handle_universal_source(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith('newsrc_'))
+def handle_category_selection(call):
     if call.from_user.id != config.ADMIN_ID: return
     
     parts = call.data.split('_')
-    # Badlaav: Ab directly sirf "Pocket" ya "Pratilipi" string store hogi
-    platform = "Pocket" if parts[1] == "pocket" else "Pratilipi"
+    platform = "pocket" if parts[1] == "pocket" else "pratilipi"
     state_id = parts[2]
     
     data = pending_setups.get(state_id)
     if not data:
-        return bot.answer_callback_query(call.id, "Setup Session Expired! Dubara add karein.", show_alert=True)
+        return bot.answer_callback_query(call.id, "Session Expired! Dubara /add karein.", show_alert=True)
     
     try: bot.delete_message(call.message.chat.id, call.message.message_id)
     except: pass
     
     item_id = str(uuid.uuid4())[:10]
     
-    # --- IF COMING FROM FLOW 1 (CHANNEL) ---
-    if data["type"] == "channel_flow":
-        try:
-            plans = {}
-            for p in data["plans_data"].split(','):
-                sp = p.split(':')
-                if len(sp) == 2: plans[sp[0].strip()] = sp[1].strip()
-            if not plans: raise ValueError
-        except:
-            return bot.send_message(call.message.chat.id, "❌ Plans ka format galat tha. Dubara /add karein.")
-            
-        channels_col.update_one(
-            {"channel_id": data["ch_id"]}, 
-            {"$set": {
-                "item_id": item_id,
-                "name": data["ch_name"], 
-                "plans": plans, 
-                "demo_link": data["demo"], 
-                "file_id": data["file_id"],
-                "source": platform, 
-                "type": "channel"
-            }}, 
-            upsert=True
-        )
-        
-    # --- IF COMING FROM FLOW 2 (DIRECT PHOTO STORY) ---
-    elif data["type"] == "story_flow":
-        fake_channel_id = int(f"-100{str(uuid.uuid4().int)[:9]}") 
-        channels_col.insert_one({
+    channels_col.update_one(
+        {"channel_id": data["ch_id"]}, 
+        {"$set": {
             "item_id": item_id,
-            "channel_id": fake_channel_id,
-            "story_name": data["story_name"],
-            "price": data["price"],
-            "source": platform, 
-            "bot_link": data["final_link"], 
-            "demo_link": data["demo"],
+            "name": data["ch_name"], 
+            "validity": data["validity_days"], 
             "file_id": data["file_id"],
+            "demo_link": data["demo_link"],
+            "source": platform, 
             "type": "channel"
-        })
-
+        }}, 
+        upsert=True
+    )
+    
     pending_setups.pop(state_id, None)
     
-    link = f"https://t.me/{bot.get_me().username}?start={item_id}"
+    bot_user = bot.get_me().username
+    bot_link = f"https://t.me/{bot_user}?start={item_id}"
     bot.send_message(
         call.message.chat.id, 
-        f"✅ <b>sᴛᴏʀʏ sᴇᴛᴜᴘ ғɪɴɪsʜᴇᴅ!</b>\n\n📂 <b>Platform:</b> {platform}\n🔗 <b>Link:</b> <code>{link}</code>", 
+        f"✅ <b>sᴛᴏʀʏ  sᴇᴛᴜᴘ  ғɪɴɪsʜᴇᴅ!</b>\n\n"
+        f"📂 <b>source:</b> {platform}\n"
+        f"⏱️ <b>validity:</b> {data['validity_days']} Din\n"
+        f"📺 <b>demo:</b> {data['demo_link'] if data['demo_link'] else 'None'}\n"
+        f"🔗 <b>link:</b> <code>{bot_link}</code>", 
         parse_mode="HTML"
     )
