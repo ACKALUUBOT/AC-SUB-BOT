@@ -382,5 +382,4 @@ def save_manual_combo(message, combo_name, validity_days, price, file_id, demo):
     if file_id:
         bot.send_photo(message.chat.id, photo=file_id, caption=success_text, parse_mode="HTML")
     else:
-        bot.
-    
+        
