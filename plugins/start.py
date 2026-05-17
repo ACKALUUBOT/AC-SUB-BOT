@@ -73,7 +73,7 @@ def start_handler(message):
 
     # ─── 2. MAIN DASHBOARD (ADMIN VS USER SPLIT) ───
     markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton("🛍️ ᴏᴘᴇɴ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀェ 🛍️", callback_data="open_store"))
+    markup.add(InlineKeyboardButton("🛍️ ᴏᴘᴇɴ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀᴇ 🛍️", callback_data="open_store"))
     
     markup.add(
         InlineKeyboardButton("👤 ᴍʏ ᴅᴀsʜʙᴏᴀʀᴅ", callback_data="my_plan"),
@@ -92,16 +92,16 @@ def start_handler(message):
         )
 
     title = "╔════════════════════════════╗\n       ✨ sᴛᴏʀʏ x ᴅᴇᴍᴏ ✨\n╚════════════════════════════╝"
-    desc = """ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ᴏғғɪᴄɪᴀʟ sᴛᴏʀʏ sᴇʟʟᴇ r ʙᴏᴛ!
+    desc = """ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ᴏғғɪᴄɪᴀʟ sᴛᴏʀʏ sᴇʟʟᴇʀ ʙᴏᴛ!
 
-ᴛʜɪs ʙᴏᴛ sᴇʟʟs ᴀʟʟ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ ᴀɴ ʟᴀᴛᴇsᴛ sᴛᴏʀɪᴇs ᴏғ ᴘᴏᴄᴋᴇᴛ ғᴍ ᴀɴᴅ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ. ʏᴏᴜ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴅᴇᴍᴏ ғɪʟᴇs ʜᴇʀᴇ ʙᴇғᴏʀᴇ ᴍᴀᴋɪɴɢ ᴀ ᴘᴜʀᴄʜᴀsᴇ!
+ᴛʜɪs ʙᴏᴛ sᴇʟʟs ᴀʟʟ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ ᴀɴᴅ ʟᴀᴛᴇsᴛ sᴛᴏʀɪᴇs ᴏғ ᴘᴏᴄᴋᴇᴛ ғᴍ ᴀɴᴅ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ. ʏᴏᴜ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴅᴇᴍᴏ ғɪʟᴇs ʜᴇʀᴇ ʙᴇғᴏʀᴇ ᴍᴀᴋɪɴɢ ᴀ ᴘᴜʀᴄʜᴀsᴇ!
 
-⚡ ɪɴsᴛᴀɴᴛ ᴅᴇᴍᴏ | ᴀᴜᴛᴏ ᴘᴀ PAYᴍᴇɴᴛ | ᴀᴜᴛᴏ ᴅᴇʟɪᴠᴇʀʏ"""
+⚡ ɪɴsᴛᴀɴᴛ ᴅᴇᴍᴏ | ᴀᴜᴛᴏ ᴘᴀʏᴍᴇɴᴛ | ᴀᴜᴛᴏ ᴅᴇʟɪᴠᴇʀʏ"""
 
     bot.send_message(chat_id, f"{title}\n\n{desc}", reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 3. TEXT NAVIGATION HANDLERS ───
+# ─── 3. TEXT NAVIGATION HANDLERS (FIXED & REAL-TIME) ───
 @bot.message_handler(func=lambda msg: msg.text in [
     "✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs", 
     "🔥 ᴘᴏᴄᴋᴇᴛ ғᴍ sᴛᴏʀɪᴇs", 
@@ -116,17 +116,10 @@ def store_navigation_text_handler(message):
     text = message.text
 
     if text == "🚫 STORE IS EMPTY":
-        return bot.send_message(message.chat.id, "<blockquote>⚠️ ❌ NO STORY AVAILABLE.</blockquote>", parse_mode="HTML")
+        return bot.send_message(message.chat.id, "<blockquote>⚠️ ❌ NO STORY AVAILABLE RIGHT NOW.</blockquote>", parse_mode="HTML")
 
-    if text == "❌ CLOSE STORE":
-        return bot.send_message(
-            message.chat.id, 
-            "✖️ <b>sᴛᴏʀᴇ ᴄʟᴏsᴇᴅ!</b>", 
-            reply_markup=ReplyKeyboardRemove(), 
-            parse_mode="HTML"
-        )
-
-    if text == "« BACK TO MENU":
+    if text == "❌ CLOSE STORE" or text == "« BACK TO MENU":
+        USER_STATES[user_id] = {"category": "home", "page": 1}
         bot.send_message(message.chat.id, "⬅️ <i>Returning to Dashboard Panel...</i>", reply_markup=ReplyKeyboardRemove())
         return start_handler(message)
 
@@ -134,6 +127,7 @@ def store_navigation_text_handler(message):
         USER_STATES[user_id] = {"category": "home", "page": 1}
         return bot.send_message(message.chat.id, get_store_text(), reply_markup=get_categories_markup(), parse_mode="HTML")
 
+    # Dynamic Routing strictly matching with database and store file layout
     if text == "✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs":
         USER_STATES[user_id] = {"category": "pratilipi", "page": 1}
         cat_title, c_type = "🎬 <b>ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs</b>", "pratilipi"
@@ -144,8 +138,14 @@ def store_navigation_text_handler(message):
         USER_STATES[user_id] = {"category": "combo", "page": 1}
         cat_title, c_type = "🎁 <b>✨ ᴘʀᴇᴍɪᴜᴍ ᴄᴏᴍʙᴏ ᴘᴀᴄᴋs ✨</b>", "combo"
 
+    # Real-time database items rendering
     markup = get_items_by_category_markup(c_type, bot.get_me().username, page=1)
-    bot.send_message(message.chat.id, f"{cat_title}\n──────────────────────────\n👇 <i>apni pasand ka item select karke full access lein:</i>", reply_markup=markup, parse_mode="HTML")
+    bot.send_message(
+        message.chat.id, 
+        f"{cat_title}\n──────────────────────────\n👇 <i>apni pasand ka item select karke full access lein:</i>", 
+        reply_markup=markup, 
+        parse_mode="HTML"
+    )
 
 
 # ─── 4. PAGINATION HANDLER ───
@@ -160,17 +160,26 @@ def store_pagination_handler(message):
 
     USER_STATES[user_id] = state
     markup = get_items_by_category_markup(state["category"], bot.get_me().username, page=state["page"])
-    bot.send_message(message.chat.id, f"<b>AVAILABLE STORIES — {state['category'].upper()}</b>\n`PAGE {state['page']}`\n──────────────────────────", reply_markup=markup, parse_mode="HTML")
+    bot.send_message(
+        message.chat.id, 
+        f"<b>AVAILABLE STORIES — {state['category'].upper()}</b>\n`PAGE {state['page']}`\n──────────────────────────", 
+        reply_markup=markup, 
+        parse_mode="HTML"
+    )
 
 
-# ─── 5. STORY CLICK ROUTER (3 SEPARATE STRICT FLOWS FIXED) ───
+# ─── 5. STORY CLICK ROUTER (3 SEPARATE STRICT FLOWS MATCHING INDEX LOGIC) ───
 @bot.message_handler(func=lambda msg: any(char in msg.text for char in ['[ ₹', '➔ [']))
 def item_selection_handler(message):
     input_text = message.text
     clean_name = input_text
     
+    # Strictly handle serial numbers like "1. Story Name [ ₹49 ]"
     if "." in input_text:
-        clean_name = input_text.split(".", 1)[1].split("[")[0].strip()
+        try:
+            clean_name = input_text.split(".", 1)[1].split("[")[0].strip()
+        except:
+            clean_name = input_text.split("[")[0].strip()
     elif "🎁" in input_text:
         clean_name = input_text.replace("🎁", "").split("➔")[0].strip()
 
