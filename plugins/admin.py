@@ -1,248 +1,244 @@
 import uuid
+from telebot import types
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-from utils import bot
-from database import channels_col, users_col
+from database import channels_col
+from utils import bot, get_time_string
+from datetime import datetime
 import config
 
-# Global storage temporary data hold karne ke liye jab tak category select na ho
-pending_setups = {}
+# Temporary state memory registration flows ke liye
+ADMIN_SETUP_STATE = {}
 
-def get_chat_id(message):
-    if hasattr(message, 'chat') and message.chat:
-        return message.chat.id
-    if hasattr(message, 'message') and message.message and message.message.chat:
-        return message.message.chat.id
-    return None
+# =====================================================================
+# ─── FLOW 1: FORWARDED CHANNEL REGISTRATION (/add) ───
+# =====================================================================
 
-# ==========================================
-# --- 1. REMOVE USER (SECURE DELETE) ---
-# ==========================================
-@bot.message_handler(commands=['remove'], func=lambda m: m.from_user.id == config.ADMIN_ID)
-def remove_user_start(message):
-    chat_id = get_chat_id(message)
-    if not chat_id: return
-    
-    msg = bot.send_message(
-        chat_id, 
-        "👤 <b>User ko remove karein:</b>\n\nUs user ki <b>ID</b> bhejein jiska access khatam karna hai (ya /cancel):", 
-        parse_mode="HTML"
-    )
-    bot.register_next_step_handler(msg, process_remove_user)
-
-def process_remove_user(message):
-    if message.text == '/cancel':
-        return bot.send_message(message.chat.id, "❌ Action cancelled.")
-    try:
-        u_id = int(message.text)
-        result = users_col.delete_many({"user_id": u_id})
-        if result.deleted_count > 0:
-            bot.send_message(message.chat.id, f"✅ <b>Success!</b>\nUser <code>{u_id}</code> ka access hata diya gaya.", parse_mode="HTML")
-            try: 
-                bot.send_message(u_id, "⚠️ <b>Access Revoked:</b> Aapka subscription khatam kar diya gaya hai.")
-            except Exception: 
-                pass
-        else:
-            bot.send_message(message.chat.id, "❓ Is ID ka koi active subscription nahi mila.")
-    except ValueError:
-        bot.send_message(message.chat.id, "❌ Invalid ID! Sirf numbers bhejein.")
-
-
-# ==========================================
-# --- 2. MANAGE CHANNELS & STORIES ---
-# ==========================================
-@bot.message_handler(commands=['channels'], func=lambda m: m.from_user.id == config.ADMIN_ID)
-def list_channels(message):
-    chat_id = get_chat_id(message)
-    if not chat_id: return
-
-    cursor = channels_col.find()
-    markup = InlineKeyboardMarkup()
-    for ch in cursor:
-        name = ch.get('name') or "Unnamed Item"
-        markup.add(InlineKeyboardButton(f"⚙️ Manage: {name}", callback_data=f"manage_{ch['item_id']}"))
-        
-    if markup.keyboard:
-        bot.send_message(chat_id, "📑 <b>ʏᴏᴜʀ  ɪɴᴠᴇɴᴛᴏʀʏ:</b>\nNiche kisi bhi item ko manage karein:", reply_markup=markup, parse_mode="HTML")
-    else:
-        bot.send_message(chat_id, "❌ Abhi koi item add nahi hai.")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith('manage_'))
-def manage_ch(call):
+@bot.callback_query_handler(func=lambda call: call.data == "admin_add")
+def admin_add_channel_callback(call):
+    bot.answer_callback_query(call.id)
     if call.from_user.id != config.ADMIN_ID:
-        return bot.answer_callback_query(call.id, "Unauthorized!")
+        return bot.send_message(call.message.chat.id, "❌ Only admin can access this.")
         
-    item_id = call.data.split('_')[1]
-    ch_data = channels_col.find_one({"item_id": item_id})
-    if not ch_data: 
-        return bot.answer_callback_query(call.id, "Data not found!")
-
-    bot_user = bot.get_me().username
-    link = f"https://t.me/{bot_user}?start={item_id}"
-    name = ch_data.get('name') or "Unnamed Item"
-    source_platform = ch_data.get('source', 'none') 
-    validity_info = ch_data.get('validity', 'N/A')
-    
-    text = (
-        f"⚙️ <b>sᴇᴛᴛɪɴɢs:</b> {name}\n"
-        f"────────────────────\n"
-        f"📂 <b>source:</b> <code>{source_platform}</code>\n"
-        f"⏱️ <b>validity:</b> {validity_info} Din\n"
-        f"📺 <b>demo:</b> {ch_data.get('demo_link', 'None')}\n\n"
-        f"🔗 <b>sʜᴀʀᴇ ʟɪɴᴋ:</b>\n<code>{link}</code>\n"
-        f"────────────────────"
-    )
-    try: 
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-    except Exception: 
-        pass
-
-    photo_id = ch_data.get('file_id')
-    if photo_id:
-        bot.send_photo(call.message.chat.id, photo=photo_id, caption=text, parse_mode="HTML")
-    else:
-        bot.send_message(call.message.chat.id, text=text, parse_mode="HTML")
-
-
-# ==========================================
-# --- 3. CLEAN SINGLE-FLOW WITH DEMO LINK ---
-# ==========================================
-@bot.message_handler(commands=['add'], func=lambda m: m.from_user.id == config.ADMIN_ID)
-def add_start(message):
-    chat_id = get_chat_id(message)
-    if not chat_id: return
-    
     msg = bot.send_message(
-        chat_id, 
-        "📢 <b>ᴀ_ᴅ_ᴅ  <b>ᴄ_ʜ_ᴀ_ɴ__ɴ_ᴇ_ʟ</b>:</b>\n\n"
-        "➔ Jis channel ko add karna hai, us channel ka koi bhi ek post yahan <b>Forward</b> karein:", 
+        call.message.chat.id, 
+        "📺 <b>[ᴄʜᴀɴɴᴇʟ sᴇᴛᴜᴘ] sᴛᴇᴘ 𝟷:</b>\n\nJis premium private channel ko add karna hai, uski koi bhi ek post yahan <b>Forward</b> kijiye:\n\n<i>⚠️ Note: Bot us channel me Admin hona chahiye taaki invite link bana sake!</i>",
         parse_mode="HTML"
     )
-    bot.register_next_step_handler(msg, route_setup_type)
+    bot.register_next_step_handler(msg, process_forwarded_channel)
 
-def route_setup_type(message):
-    if message.text == "/cancel":
-        return bot.send_message(message.chat.id, "❌ Action cancelled.")
+def process_forwarded_channel(message):
+    if message.text and message.text.startswith('/'): return
+    admin_id = message.from_user.id
 
-    is_forwarded = (
-        message.forward_from_chat or 
-        message.forward_from or 
-        message.forward_date or 
-        hasattr(message, 'forward_signature')
-    )
+    if not message.forward_from_chat:
+        msg = bot.send_message(message.chat.id, "⚠️ Kripya post ko direct channel se hi forward karein. Dobara try karein:")
+        return bot.register_next_step_handler(msg, process_forwarded_channel)
 
-    if is_forwarded:
-        if message.forward_from_chat:
-            ch_id = message.forward_from_chat.id
-            ch_name = message.forward_from_chat.title
-        else:
-            ch_id = message.forward_from_chat.id if message.forward_from_chat else message.chat.id
-            ch_name = "Private/Hidden Channel"
-        
-        msg = bot.send_message(
-            message.chat.id, 
-            f"✅ <b>Channel Detected:</b> {ch_name}\n"
-            f"🆔 <b>ID:</b> <code>{ch_id}</code>\n\n"
-            f"⏱️ <b>⏳ ᴠᴀʟɪᴅɪᴛʏ:</b>\n"
-            f"Yeh data kitne din tak valid rakhna hai? (Sirf numbers likhein, jaise: 30):", 
-            parse_mode="HTML"
-        )
-        bot.register_next_step_handler(msg, channel_ask_photo, ch_id, ch_name)
-        
-    else:
-        msg = bot.send_message(message.chat.id, "❌ Galat Input! Kripya channel se post forward karein (ya /cancel):")
-        bot.register_next_step_handler(msg, route_setup_type)
+    channel_id = message.forward_from_chat.id
+    channel_name = message.forward_from_chat.title
 
-def channel_ask_photo(message, ch_id, ch_name):
-    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    validity_days = message.text.strip()
-    
-    msg = bot.send_message(
-        message.chat.id, 
-        "🖼️ <b>ᴄʜᴀɴɴᴇʟ ᴘʜᴏᴛᴏ:</b>\n"
-        "Aap is channel ke liye koi custom photo lagana chahte hain?\n\n"
-        "➔ Ek <b>Photo</b> bhejein.\n"
-        "➔ Ya bina photo ke aage badhne ke liye <code>skip</code> likhein:",
-        parse_mode="HTML"
-    )
-    bot.register_next_step_handler(msg, channel_ask_demo, ch_id, ch_name, validity_days)
-
-def channel_ask_demo(message, ch_id, ch_name, validity_days):
-    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    file_id = message.photo[-1].file_id if message.photo else None
-    
-    msg = bot.send_message(message.chat.id, "🔗 <b>Demo Link bhejein</b> (Ya 'skip' ya 'none' likhein):")
-    bot.register_next_step_handler(msg, channel_ask_category, ch_id, ch_name, validity_days, file_id)
-
-def channel_ask_category(message, ch_id, ch_name, validity_days, file_id):
-    if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
-    
-    state_id = str(uuid.uuid4())[:8]
-    pending_setups[state_id] = {
-        "ch_id": ch_id, 
-        "ch_name": ch_name,
-        "validity_days": validity_days, 
-        "file_id": file_id,
-        "demo_link": demo
+    ADMIN_SETUP_STATE[admin_id] = {
+        "channel_id": int(channel_id),
+        "name": channel_name,
+        "is_combo": False,
+        "item_id": f"chan_{str(uuid.uuid4())[:8]}"
     }
-    
-    markup = InlineKeyboardMarkup()
-    markup.add(
-        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{state_id}"),
-        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{state_id}")
-    )
-    bot.send_message(
+
+    msg = bot.send_message(
         message.chat.id, 
-        "📂 <b>Select Category (small text):</b>", 
-        reply_markup=markup, 
+        f"💰 <b>[ᴄʜᴀɴɴᴇʟ sᴇᴛᴜᴘ] sᴛᴇᴘ 𝟸 (ᴘʀɪᴄɪɴɢ):</b>\n\nChannel: <b>{channel_name}</b>\n\nIs channel ka subscription price set karein.\n\n"
+        "<b>Format 1 (Single Price):</b>\n<code>99</code>\n\n"
+        "<b>Format 2 (Multi Plans):</b>\n<code>60:49,1440:99,10080:199</code>\n"
+        "<i>(60 mins=49rs, 1 din=99rs)</i>",
         parse_mode="HTML"
     )
+    bot.register_next_step_handler(msg, save_channel_with_price)
 
+def save_channel_with_price(message):
+    if message.text and message.text.startswith('/'): return
+    admin_id = message.from_user.id
+    price_input = message.text.strip()
 
-# ==========================================
-# --- 4. CALLBACK & FINAL DATABASE SAVE ---
-# ==========================================
-@bot.callback_query_handler(func=lambda call: call.data.startswith('newsrc_'))
-def handle_category_selection(call):
-    if call.from_user.id != config.ADMIN_ID: return
-    
-    parts = call.data.split('_')
-    platform = "pocket" if parts[1] == "pocket" else "pratilipi"
-    state_id = parts[2]
-    
-    data = pending_setups.get(state_id)
-    if not data:
-        return bot.answer_callback_query(call.id, "Session Expired! Dubara /add karein.", show_alert=True)
-    
-    try: bot.delete_message(call.message.chat.id, call.message.message_id)
-    except: pass
-    
-    item_id = str(uuid.uuid4())[:10]
-    
+    if admin_id not in ADMIN_SETUP_STATE:
+        return bot.send_message(message.chat.id, "❌ Session expired.")
+
+    plans_dict = {}
+    final_price = "49"
+
+    if ":" in price_input:
+        try:
+            pairs = price_input.split(",")
+            for p in pairs:
+                mins, rs = p.split(":")
+                plans_dict[mins.strip()] = rs.strip()
+            final_price = list(plans_dict.values())[0]
+        except:
+            bot.send_message(message.chat.id, "❌ Invalid multi-plan format! Default Price ₹49 set ho gaya hai.")
+    else:
+        final_price = price_input if price_input.isdigit() else "49"
+
+    channel_data = ADMIN_SETUP_STATE[admin_id]
+    channel_data["price"] = final_price
+    channel_data["plans"] = plans_dict if plans_dict else None
+    channel_data["timestamp"] = datetime.now().timestamp()
+
     channels_col.update_one(
-        {"channel_id": data["ch_id"]}, 
-        {"$set": {
-            "item_id": item_id,
-            "name": data["ch_name"], 
-            "validity": data["validity_days"], 
-            "file_id": data["file_id"],
-            "demo_link": data["demo_link"],
-            "source": platform, 
-            "type": "channel"
-        }}, 
+        {"channel_id": channel_data["channel_id"]},
+        {"$set": channel_data},
         upsert=True
     )
-    
-    pending_setups.pop(state_id, None)
-    
-    bot_user = bot.get_me().username
-    bot_link = f"https://t.me/{bot_user}?start={item_id}"
-    bot.send_message(
+
+    bot.send_message(message.chat.id, f"✅ <b>ᴘʀᴇᴍɪᴜᴍ ᴄʜᴀɴɴᴇʟ sᴀᴠᴇᴅ!</b>\n\n📢 {channel_data['name']}\n💳 Base Price: ₹{final_price}", parse_mode="HTML")
+    del ADMIN_SETUP_STATE[admin_id]
+
+
+# =====================================================================
+# ─── FLOW 2: MANUAL COMBO BUNDLE REGISTRATION (/admin_combo) ───
+# =====================================================================
+
+@bot.callback_query_handler(func=lambda call: call.data == "admin_combo")
+def admin_combo_callback(call):
+    bot.answer_callback_query(call.id)
+    if call.from_user.id != config.ADMIN_ID:
+        return bot.send_message(call.message.chat.id, "❌ Only admin can access this.")
+        
+    msg = bot.send_message(
         call.message.chat.id, 
-        f"✅ <b>sᴛᴏʀʏ  sᴇᴛᴜᴘ  ғɪɴɪsʜᴇᴅ!</b>\n\n"
-        f"📂 <b>source:</b> {platform}\n"
-        f"⏱️ <b>validity:</b> {data['validity_days']} Din\n"
-        f"📺 <b>demo:</b> {data['demo_link'] if data['demo_link'] else 'None'}\n"
-        f"🔗 <b>link:</b> <code>{bot_link}</code>", 
+        "🎁 <b>[ᴄᴏᴍʙᴏ sᴇᴛᴜᴘ] sᴛᴇᴘ 𝟷:</b>\n\nApne Combo Pack ka ek attractive <b>Naam (Title)</b> likh kar bhejiye:",
         parse_mode="HTML"
     )
+    bot.register_next_step_handler(msg, process_combo_name)
+
+def process_combo_name(message):
+    if message.text and message.text.startswith('/'): return
+    admin_id = message.from_user.id
+    
+    ADMIN_SETUP_STATE[admin_id] = {
+        "combo_name": message.text.strip(),
+        "is_combo": True,
+        "item_id": f"combo_{str(uuid.uuid4())[:8]}"
+    }
+    
+    msg = bot.send_message(
+        message.chat.id,
+        "📝 <b>[ᴄᴏᴍʙᴏ sᴇᴛᴜᴘ] sᴛᴇᴘ 𝟸:</b>\n\nIs combo bundle ka ek acha sa <b>Description</b> likhiye:",
+        parse_mode="HTML"
+    )
+    bot.register_next_step_handler(msg, process_combo_description)
+
+def process_combo_description(message):
+    if message.text and message.text.startswith('/'): return
+    admin_id = message.from_user.id
+    if admin_id not in ADMIN_SETUP_STATE: return
+        
+    ADMIN_SETUP_STATE[admin_id]["description"] = message.text.strip()
+    msg = bot.send_message(message.chat.id, "💰 <b>[ᴄᴏᴍʙᴏ sᴇᴛᴜᴘ] sᴛᴇᴘ 𝟛:</b>\n\nIs combo bundle ka <b>Price (₹)</b> bhejiye:", parse_mode="HTML")
+    bot.register_next_step_handler(msg, process_combo_price)
+
+def process_combo_price(message):
+    if message.text and message.text.startswith('/'): return
+    admin_id = message.from_user.id
+    price_input = message.text.strip()
+    
+    if not price_input.isdigit():
+        msg = bot.send_message(message.chat.id, "⚠️ Kripya sirf number bhejiye. Dobara price daaliye:")
+        return bot.register_next_step_handler(msg, process_combo_price)
+        
+    ADMIN_SETUP_STATE[admin_id]["price"] = price_input
+    
+    msg = bot.send_message(
+        message.chat.id,
+        "🆔 <b>[ᴄᴏᴍʙᴏ sᴇᴛᴜᴘ] sᴛᴇᴘ 𝟜 (ʟᴀsᴛ sᴛᴇᴘ):</b>\n\nIs combo pack ke sabhi <b>Channels ki Telegram ID</b> comma ( , ) lagakar bhejiye:\n<code>-100123456789,-100987654321</code>",
+        parse_mode="HTML"
+    )
+    bot.register_next_step_handler(msg, process_combo_channels_and_save)
+
+def process_combo_channels_and_save(message):
+    if message.text and message.text.startswith('/'): return
+    admin_id = message.from_user.id
+    channels_input = message.text.strip().replace(" ", "")
+    
+    if admin_id not in ADMIN_SETUP_STATE: return
+
+    try:
+        channel_ids_list = [int(cid) for cid in channels_input.split(",") if cid]
+    except ValueError:
+        msg = bot.send_message(message.chat.id, "⚠️ Invalid IDs Format! Dobara sahi numeric IDs bhejiye:")
+        return bot.register_next_step_handler(msg, process_combo_channels_and_save)
+
+    combo_data = ADMIN_SETUP_STATE[admin_id]
+    combo_data["channels_list"] = channel_ids_list
+    combo_data["timestamp"] = datetime.now().timestamp()
+    
+    channels_col.insert_one(combo_data)
+    bot.send_message(message.chat.id, f"✅ <b>ᴄᴏᴍʙᴏ sᴀᴠᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!</b>\n\n🎁 Pack: {combo_data['combo_name']}\n📊 Channels: {len(channel_ids_list)} Linked.", parse_mode="HTML")
+    del ADMIN_SETUP_STATE[admin_id]
+
+
+# =====================================================================
+# ─── FLOW 3: MANAGE & LIST ALL CHANNELS/ITEMS (`⚙️ ᴍᴀɴᴀɢᴇ ᴀʟʟ`) ───
+# =====================================================================
+
+@bot.callback_query_handler(func=lambda call: call.data == "admin_channels")
+def admin_manage_channels_callback(call):
+    """Admin ko total added content ki active list dikhane ke liye"""
+    bot.answer_callback_query(call.id)
+    if call.from_user.id != config.ADMIN_ID: return
+
+    all_items = list(channels_col.find())
+    if not all_items:
+        return bot.send_message(call.message.chat.id, "📁 <b>sᴛᴏʀᴇ ᴇᴍᴘᴛʏ:</b> Database me filhal koi data nahi mila.", parse_mode="HTML")
+
+    report = "⚙️ <b>ᴄʜᴀɴɴᴇʟ & sᴛᴏʀʏ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ ᴘᴀɴᴇʟ</b>\n──────────────────────────\n\n"
+    markup = InlineKeyboardMarkup(row_width=1)
+
+    for idx, item in enumerate(all_items, start=1):
+        db_id = item.get('item_id') or item.get('channel_id')
+        
+        if item.get('is_combo'):
+            title = f"🎁 Combo: {item['combo_name']} (₹{item['price']})"
+        elif 'story_name' in item:
+            title = f"🎬 Story: {item['story_name']} [{item.get('source', 'audio')}] (₹{item['price']})"
+        else:
+            title = f"📢 Chan: {item.get('name', 'VIP Channel')} (₹{item['price']})"
+            
+        report += f"<b>{idx}.</b> <code>{title}</code>\n"
+        # Har item ke niche direct use delete karne ka inline button
+        markup.add(InlineKeyboardButton(f"🗑️ Delete: {title[:25]}...", callback_data=f"dropitem_{db_id}"))
+
+    markup.add(InlineKeyboardButton("⬅️ CLOSE MANAGEMENT", callback_data="back_to_start"))
+    bot.send_message(call.message.chat.id, report, reply_markup=markup, parse_mode="HTML")
+
+
+# =====================================================================
+# ─── FLOW 4: REMOVE BUTTON LOGIC (TRIGGER DETECT & DROP ACTION) ───
+# =====================================================================
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("dropitem_"))
+def admin_drop_item_confirm(call):
+    """List me se delete button click hone par use database se urane ke liye"""
+    bot.answer_callback_query(call.id)
+    if call.from_user.id != config.ADMIN_ID: return
+
+    target_id = call.data.replace("dropitem_", "")
+    
+    # Mongo strict query deletion sequence
+    query = {"$or": [{"item_id": target_id}, {"channel_id": int(target_id) if target_id.replace('-','').isdigit() else 0}]}
+    deleted = channels_col.delete_one(query)
+
+    if deleted.deleted_count > 0:
+        bot.answer_callback_query(call.id, "✅ Item database se permanently delete ho gaya!", show_alert=True)
+        try: bot.delete_message(call.message.chat.id, call.message.message_id)
+        except: pass
+        # List refresh logic auto trigger
+        return admin_manage_channels_callback(call)
+    else:
+        bot.send_message(call.message.chat.id, "❌ Error: Item delete nahi ho paya ya nahi mila.")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "admin_remove")
+def admin_remove_shortcut_callback(call):
+    """Direct shortcut panel handle logic redirecting to strict listing control"""
+    bot.answer_callback_query(call.id)
+    bot.send_message(call.message.chat.id, "💡 <i>Loading item selection map... Use dynamic list to remove items safely.</i>", parse_mode="HTML")
+    return admin_manage_channels_callback(call)
