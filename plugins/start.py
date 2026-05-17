@@ -41,12 +41,12 @@ def start_handler(message):
                 header = "🎁 <b>ᴘʀᴇᴍɪᴜᴍ sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ʙᴜɴᴅʟᴇ</b>"
                 desc_text = f"📝 <b>ɪɴᴄʟᴜᴅᴇᴅ sᴛᴏʀɪᴇs:</b>\n<i>{data.get('description', 'Multiple premium stories inside!')}</i>"
             
-            # Condition B: Direct Story (Admin ke /add ya /add_story command se bani hui)
+            # Condition B: Direct Story
             elif data.get('story_name') and not data.get('is_combo'):
                 markup.add(InlineKeyboardButton(f"💳 🎧 ᴜɴʟᴏᴄᴋ sᴛᴏʀʏ - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
                 display_name = data.get('story_name')
-                header = f"🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ ({data.get('source', 'Audio')})</b>"
-                desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ɪɴsᴛᴀɴᴛ ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
+                header = f"🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ ({data.get('source', 'audio')})</b>"
+                desc_text = "🤖 <b><b>ᴅᴇʟɪᴠᴇʀʏ:</b></b> <code>ɪɴsᴛᴀɴᴛ ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
             
             # Condition C: Normal Forwarded Channel
             else:
@@ -88,9 +88,9 @@ def start_handler(message):
         )
 
     title = "╔════════════════════════════╗\n       ✨ sᴛᴏʀʏ x ᴅᴇᴍᴏ ✨\n╚════════════════════════════╝"
-    desc = """ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ᴏғғɪᴄɪᴀʟ sᴛᴏʀʏ sᴇʟʟᴇʀ ʙᴏᴛ!
+    desc = """ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ᴏғғɪᴄɪᴀʟ sᴛᴏʀʏ sᴇʟʟᴇ r ʙᴏᴛ!
 
-ᴛʜɪs ʙᴏᴛ sᴇʟʟs ᴀʟʟ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ ᴀɴ ʟᴀᴛᴇsᴛ sᴛᴏʀɪᴇs ᴏғ ᴘᴏᴄᴋᴇᴛ ғᴍ ᴀɴᴅ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ. ʏᴏᴜ ᴄᴀɴ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴅᴇᴍᴏ ғɪʟᴇs ʜᴇʀᴇ ʙᴇғᴏʀᴇ ᴍᴀᴋɪɴɢ ᴀ ᴘᴜʀᴄʜᴀsᴇ!
+ᴛʜɪs ʙᴏᴛ sᴇʟʟs ᴀʟʟ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ ᴀɴ ʟᴀᴛᴇsᴛ sᴛᴏʀɪᴇs ᴏғ ᴘᴏᴄᴋᴇᴛ ғᴍ ᴀɴᴅ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ. ʏᴏᴜ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴅᴇᴍᴏ ғɪʟᴇs ʜᴇʀᴇ ʙᴇғᴏʀᴇ ᴍᴀᴋɪɴɢ ᴀ ᴘᴜʀᴄʜᴀsᴇ!
 
 ⚡ ɪɴsᴛᴀɴᴛ ᴅᴇᴍᴏ | ᴀᴜᴛᴏ ᴘᴀ PAYᴍᴇɴᴛ | ᴀᴜᴛᴏ ᴅᴇʟɪᴠᴇʀʏ"""
 
@@ -159,7 +159,7 @@ def store_pagination_handler(message):
     bot.send_message(message.chat.id, f"<b>AVAILABLE STORIES — {state['category'].upper()}</b>\n`PAGE {state['page']}`\n──────────────────────────", reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 5. STORY CLICK ROUTER (Teesra Button Flow Added) ───
+# ─── 5. STORY CLICK ROUTER (FIXED FOR STRICT LOWERCASE SYNC) ───
 @bot.message_handler(func=lambda msg: any(char in msg.text for char in ['[ ₹', '➔ [']))
 def item_selection_handler(message):
     input_text = message.text
@@ -172,13 +172,13 @@ def item_selection_handler(message):
 
     state = USER_STATES.get(message.from_user.id, {"category": "pratilipi"})
     
-    # Category filter query
+    # Category filter query - Strictly mapped to lowercase "pocket" and "pratilipi"
     if state["category"] == "combo":
         data = channels_col.find_one({"combo_name": clean_name})
     elif state["category"] == "pocket":
-        data = channels_col.find_one({"story_name": clean_name, "source": "Pocket"})
+        data = channels_col.find_one({"story_name": clean_name, "source": "pocket"}) # Fixed: lowercase pocket
     elif state["category"] == "pratilipi":
-        data = channels_col.find_one({"story_name": clean_name, "source": "Pratilipi"})
+        data = channels_col.find_one({"story_name": clean_name, "source": "pratilipi"}) # Fixed: lowercase pratilipi
     else:
         data = channels_col.find_one({"story_name": clean_name})
 
@@ -191,22 +191,19 @@ def item_selection_handler(message):
 
     # --- 🌟 TEESRA FLOW SELECTION BUTTON 🌟 ---
     if data.get('is_combo'):
-        # 1st Button Type: Combo Packs ke liye
         inline_markup.add(InlineKeyboardButton(f"✅ CONFIRM & PAY COMBO - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
         header, item_label = "🎁 <b>ᴘʀᴇᴍɪᴜᴍ sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ʙᴜɴᴅʟᴇ</b>", data.get('combo_name')
         desc_text = f"📝 <b>ɪɴᴄʟᴜᴅᴇᴅ sᴛᴏʀɪᴇs:</b>\n<i>{data.get('description', 'Multiple bundles inside!')}</i>"
         
     elif data.get('story_name') and not data.get('is_combo'):
-        # 2nd Button Type: Direct Story /add se add ki hui stories ke liye (Jo aap chahte the!)
         inline_markup.add(InlineKeyboardButton(f"💳 UNLOCK PREMIUM STORY - ₹{data.get('price', data.get('plans'))}", callback_data=f"select_{db_id}_manual"))
-        header, item_label = f"🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ ({data.get('source', 'Audio')})</b>", data.get('story_name')
-        desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ɪɴsᴛᴀɴᴛ ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
+        header, item_label = f"🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ ({data.get('source', 'audio')})</b>", data.get('story_name')
+        desc_text = "🤖 <b><b>ᴅᴇʟɪᴠᴇʀʏ:</b></b> <code>ɪɴsᴛᴀɴᴛ ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</code>"
         
     else:
-        # 3rd Button Type: Normal forwarded channels ke liye
         inline_markup.add(InlineKeyboardButton(f"✅ CONFIRM & PAY - ₹{data.get('price', data.get('plans'))}", callback_data=f"select_{db_id}_manual"))
         header, item_label = "📢 <b>ᴘʀᴇᴍɪᴜᴍ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀɴɴᴇʟ</b>", data.get('name')
-        desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ᴄʜᴀɴɴᴇʟ ɪɴᴠɪᴛᴇ ʟɪɴᴋ</code>"
+        desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code><b>ᴄʜᴀɴɴᴇʟ ɪɴᴠɪᴛᴇ ʟɪɴᴋ</b></code>"
 
     if data.get('demo_link'):
         inline_markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ (ᴛᴇᴀsᴇʀ)", url=data['demo_link']))
@@ -269,7 +266,7 @@ def my_plan_callback(call):
         report = "📋 <b>ᴀʟʟ ᴀᴄᴛɪᴠᴇ sᴜʙsᴄʀɪᴘᴛɪᴏɴs (ᴀᴅᴍɪɴ)</b>\n──────────────────────────\n\n"
         for s in all_subs:
             ch = channels_col.find_one({"channel_id": s['channel_id']})
-            ch_name = ch.get('story_name') or ch.get('combo_name', 'Deleted Pack')
+            ch_name = ch.get('story_name') or ch.get('combo_name', 'Deleted Pack') if ch else 'Unknown Pack'
             days_left = (datetime.fromtimestamp(s['expiry']) - datetime.now()).days
             report += f"👤 <code>{s['user_id']}</code>\n➔ 📦 {ch_name}\n➔ ⏳ Left: <b>{max(0, days_left)} Days</b>\n─────────────────\n"
         bot.send_message(u_id, report, reply_markup=back_markup, parse_mode="HTML")
@@ -279,12 +276,12 @@ def my_plan_callback(call):
         except: pass
 
         if not subs:
-            return bot.send_message(u_id, "❌ <b>ɴᴏ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ</b>\n\nAapka filhal koi active plan nahi chal raha hai.", reply_markup=back_markup, parse_mode="HTML")
+            return bot.send_message(u_id, "❌ <b><b>ɴᴏ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ</b></b>\n\nAapka filhal koi active plan nahi chal raha hai.", reply_markup=back_markup, parse_mode="HTML")
 
         res = "👤 <b>ᴍʏ ᴘᴇʀsᴏɴᴀʟ ᴅᴀsʜʙᴏᴀʀᴅ</b>\n──────────────────────────\n\n"
         for s in subs:
             ch = channels_col.find_one({"channel_id": s['channel_id']})
-            name = ch.get('story_name') or ch.get('combo_name', 'Premium Bundle')
+            name = ch.get('story_name') or ch.get('combo_name', 'Premium Bundle') if ch else 'Premium Access'
             expiry = datetime.fromtimestamp(s['expiry']).strftime('%d %b %Y | %I:%M %p')
             res += f"🎬 <b>ɪᴛᴇᴍ:</b> {name}\n⌛ <b>ᴇxᴘɪʀʏ:</b> <code>{expiry}</code>\n──────────────────────────\n"
         bot.send_message(u_id, res, reply_markup=back_markup, parse_mode="HTML")
