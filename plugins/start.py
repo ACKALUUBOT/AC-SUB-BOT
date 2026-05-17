@@ -50,10 +50,10 @@ def start_handler(message):
             
             # Condition C: Normal Forwarded Channel
             else:
-                markup.add(InlineKeyboardButton(f"💳 ⚡ ᴜɴʟᴏᴄᴋ ᴄʜᴀɴɴᴇʟ - ₹{data.get('price', 'Premium')}", callback_data=f"select_{db_id}_manual"))
-                display_name = data.get('name', 'Premium Channel')
-                header = "📢 <b>ᴘʀᴇᴍɪᴜᴍ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀɴɴᴇʟ</b>"
-                desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ᴄʜᴀɴɴᴇʟ ɪɴᴠɪᴛᴇ ʟɪɴᴋ</code>"
+                for p_time, p_price in data['plans'].items():
+                    markup.add(InlineKeyboardButton(f"💳 {get_time_string(p_time)} - ₹{p_price}", callback_data=f"select_{db_id}_{p_time}"))
+                display_name = data.get('name', 'Premium Access')
+                header = "💎 <b>ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇss</b>"
 
             if data.get('demo_link'):
                 markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ (ᴛᴇᴀsᴇʀ)", url=data['demo_link']))
