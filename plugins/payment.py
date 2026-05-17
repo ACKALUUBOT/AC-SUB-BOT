@@ -36,7 +36,7 @@ def confirm_step(call):
     if not data: 
         return bot.answer_callback_query(call.id, f"❌ Data not found! (ID: {item_id})", show_alert=True)
 
-    # Pricing & Name selection logic for all 3 categories
+    # Pricing & Name selection logic for all categories
     if data.get('is_combo'):
         price = data['price']
         display_name = data.get('combo_name', 'Premium Combo')
@@ -44,6 +44,7 @@ def confirm_step(call):
         price = data['price']
         display_name = data.get('story_name')
     else:
+        # Agar validity din ke hisab se save hai toh data.get('validity') check karega, nahi toh plans dict
         price = data['plans'].get(mins, "0") if isinstance(data.get('plans'), dict) else data.get('price', '0')
         display_name = data.get('name', 'Premium Channel')
     
@@ -104,7 +105,7 @@ def manual_pay(call):
     else:
         try: bot.delete_message(call.message.chat.id, call.message.message_id)
         except: pass
-        bot.send_message(call.message.chat.id, f"📲 <b>ᴜᴘɪ ɪᴅ:</b> <code>{config.UPI_ID}</code>\nAmount: <b>₹{price}</b>\n\n➔ Pay karne ke baad niche button dabayein.", reply_markup=markup, parse_mode="HTML")
+        bot.send_message(call.message.chat.id, f"📲 <b>ᴜᴘɪ ɪᴅ:</b> <code>{config.UPI_ID}</code>\nAmount: <b>₹{price}</b>\n\n➔ Pay karne ke baad niche button dabayein.", reply_markup=markup, reply_markup=markup, parse_mode="HTML")
 
 
 # --- 3. DIRECT SCREENSHOT SUBMISSION ---
@@ -118,7 +119,7 @@ def handle_paid(call):
     try: bot.delete_message(call.message.chat.id, call.message.message_id)
     except: pass
     
-    markup = InlineKeyboardMarkup().add(InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇɴᴛ", callback_data="cancel_payment"))
+    markup = InlineKeyboardMarkup().add(InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇNT", callback_data="cancel_payment"))
         
     msg = bot.send_message(
         call.message.chat.id, 
@@ -192,7 +193,7 @@ def return_to_list_callback(call):
     bot.send_message(call.message.chat.id, "👇 <i>apni pasand ka item select karke full access lein:</i>", reply_markup=markup, parse_mode="HTML")
 
 
-# --- 4. ADMIN APPROVAL (FIXED AND SEPARATED FLOWS) ---
+# --- 4. ADMIN APPROVAL (FIXED FOR NEW SINGLE-USE EXPIRING LINKS) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('app_'))
 def admin_approve(call):
     parts = call.data.split('_')
@@ -206,6 +207,7 @@ def admin_approve(call):
     if not data: 
         return bot.answer_callback_query(call.id, "❌ Data not found on Approval!", show_alert=True)
     
+    # Calculate expiry
     expiry = int(time.time()) + (int(mins) * 60) if mins != 'manual' else int(time.time()) + (365*24*60*60)
     markup = InlineKeyboardMarkup(row_width=1)
 
@@ -215,6 +217,7 @@ def admin_approve(call):
         for ch_id in data['channels_list']:
             users_col.update_one({"user_id": int(u_id), "channel_id": int(ch_id)}, {"$set": {"expiry": expiry}}, upsert=True)
             try:
+                # Member limit 1 lagakar temporary dynamic link generate ho raha hai
                 invite = bot.create_chat_invite_link(int(ch_id), member_limit=1)
                 ch_info = channels_col.find_one({"channel_id": int(ch_id)})
                 ch_title = ch_info.get('name') or ch_info.get('story_name') if ch_info else f"VIP Channel {ch_id}"
@@ -223,23 +226,35 @@ def admin_approve(call):
                 print(f"Combo Link Gen Error for {ch_id}: {e}")
         msg += "⚠️ <i>Sabhi links single-use hain, ek baar join hone ke baad automatic expire ho jayengi!</i>"
 
-    # ─── CASE B: FORWARDED CHANNEL APPROVAL (Strict Filter - Fixed Bug) ───
-    elif 'channel_id' in data and 'story_name' not in data:
+    # ─── CASE B: FORWARDED CHANNEL/NEW FLOW APPROVAL ───
+    elif data.get('type') == 'channel' and 'channel_id' in data:
         target_channel = int(data['channel_id'])
         users_col.update_one({"user_id": int(u_id), "channel_id": target_channel}, {"$set": {"expiry": expiry}}, upsert=True)
         try:
-            # 🌟 Yahan limit 1 wala private join link create ho raha hai
-            invite = bot.create_chat_invite_link(chat_id=target_channel, member_limit=1)
+            # Strictly member_limit=1 set kiya hai taaki user join kare aur link band ho jaye
+            invite = bot.create_chat_invite_link(chat_id=target_channel, member_limit=1, name=f"Paid_{u_id}")
             markup.add(InlineKeyboardButton("🔐 JOIN PREMIUM CHANNEL", url=invite.invite_link))
-            msg = f"✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nChannel: <b>{data.get('name', 'VIP Channel')}</b>\n\nJoin karne ke liye neeche button par click karein:\n\n⚠️ <i>Yeh link single use hai, ek baar use hone ke baad automatic expire ho jayegi!</i>"
+            
+            # Din ya lifetime info fetch karne ke liye
+            validity_display = data.get('validity', mins)
+            msg = (
+                f"✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\n"
+                f"📂 <b>source:</b> <code>{data.get('source', 'none')}</code>\n"
+                f"⏱️ <b>validity:</b> {validity_display} Din\n"
+                f"🎬 <b>Channel:</b> <b>{data.get('name', 'VIP Channel')}</b>\n\n"
+                f"Join karne ke liye neeche button par click karein:\n\n"
+                f"⚠️ <i>Yeh link single use hai, ek baar use hone ke baad automatic expire ho jayegi!</i>"
+            )
         except Exception as e: 
             print(f"Error creating link for channel {target_channel}: {e}")
-            msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nBot private invite link generate nahi kar saka. Please ensure karein ki bot channel mein Admin hai aur uske paas 'Invite Users' permission hai."
+            msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nBot private invite link generate nahi kar saka. Please check karein ki bot channel mein Admin hai aur uske paas 'Invite Users' permission hai."
 
-    # ─── CASE C: SINGLE STORY APPROVAL (Bot Start Link) ───
+    # ─── CASE C: SINGLE STORY/DIRECT LINK APPROVAL ───
     else:
         users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
-        markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀỹ", url=data.get('bot_link', 'https://t.me')))
+        # Fix: Final link ko check karne ke liye 'final_link' aur 'bot_link' dono ka fallback rakha hai
+        target_link = data.get('final_link') or data.get('bot_link') or 'https://t.me'
+        markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀỹ", url=target_link))
         msg = f"✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\nStory: <b>{data.get('story_name', 'Premium Story')}</b>\nNiche button se access karein:"
 
     try:
@@ -265,6 +280,7 @@ def handle_chat_member_updates(update):
     if update.chat.type != "channel":
         return
 
+    # Jab koi naya member join kare tabhi link ko turant delete/revoke karne ka trigger
     if update.new_chat_member.status == "member" and update.old_chat_member.status in ["left", "kicked", "restricted"]:
         if update.invite_link and update.invite_link.invite_link:
             used_link = update.invite_link.invite_link
