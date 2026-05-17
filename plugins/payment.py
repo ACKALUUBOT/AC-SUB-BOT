@@ -186,7 +186,7 @@ def admin_approve(call):
     expiry = int(time.time()) + (int(mins) * 60) if mins != 'manual' else int(time.time()) + (365*24*60*60)
     markup = InlineKeyboardMarkup(row_width=1)
 
-    # ─── CASE A: COMBO PACK APPROVAL ───
+        # ─── CASE A: COMBO PACK APPROVAL ───
     if data.get('is_combo') and 'channels_list' in data:
         msg = "🎁 <b><b><b><b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋ ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b></b></b>\n\nAapko sabhi linked channels ka access de diya gaya hai. Niche diye buttons se join karein:\n\n"
         for ch_id in data['channels_list']:
@@ -200,8 +200,9 @@ def admin_approve(call):
                 print(f"Combo Link Error: {e}")
         msg += "⚠️ <i>Links single-use hain, ek baar join hone ke baad automatic expire ho jayengi!</i>"
 
-    # ─── CASE B: FORWARDED CHANNEL (/add Flow) ───
-    elif 'channel_id' in data and not data.get('story_name'):
+    # ─── CASE B: FORWARDED CHANNEL (/add Flow) [FIXED BY TYPE] ───
+    # Yahan pehle data.get('story_name') check ho raha tha, ab hum dynamic 'type' check karenge
+    elif data.get('type') == 'channel' or ('channel_id' in data and data.get('source') not in ['pocket', 'pratilipi']):
         target_channel = int(data['channel_id'])
         users_col.update_one({"user_id": int(u_id), "channel_id": target_channel}, {"$set": {"expiry": expiry}}, upsert=True)
         try:
@@ -217,6 +218,28 @@ def admin_approve(call):
                 f"Join karne ke liye neeche button par click karein:\n\n"
                 f"⚠️ <i>Yeh link single use hai, ek baar use hone ke baad automatic expire ho jayegi!</i>"
             )
+        except Exception as e: 
+            print(f"Error: {e}")
+            msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nBot link generate nahi kar saka, admin rights setup check karein."
+
+    # ─── CASE C: MANUAL PREMIUM STORY (/add_story Flow) ───
+    else:
+        users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
+        target_link = data.get('bot_link') or data.get('final_link') or 'https://t.me'
+        
+        markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀỹ", url=target_link))
+        
+        platform_info = f"\n📂 Platform: <code>{data.get('source')}</code>" if data.get('source') else ""
+        msg = (
+            f"🎉 <b>ᴘᴀʏᴍᴇɴᴛ ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n"
+            f"────────────────────\n"
+            f"📖 <b>sᴛᴏʀỹ:</b> {data.get('story_name', 'Premium Story')}"
+            f"{platform_info}\n"
+            f"💰 <b><b>ᴘ...ʀɪᴄᴇ:</b></b> ₹{data.get('price', '49')}\n"
+            f"────────────────────\n"
+            f"➔ Niche diye gaye button par click karke apni full story access karein 👇"
+        )
+
         except Exception as e: 
             print(f"Error: {e}")
             msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nBot link generate nahi kar saka, admin rights setup check karein."
