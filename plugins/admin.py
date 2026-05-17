@@ -105,9 +105,11 @@ def manage_ch(call):
         bot.send_message(call.message.chat.id, text=text, parse_mode="HTML")
 
 
-# ==========================================
-# --- 3. CLEAN SINGLE-FLOW WITH VALIDATION & PRICE ---
-# ==========================================
+      
+
+# =====================================================================
+# ─── 3. CLEAN SINGLE-FLOW WITH DEMO SKIP BUG FIXED (/add) ───
+# =====================================================================
 @bot.message_handler(commands=['add'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def add_start(message):
     chat_id = get_chat_id(message)
@@ -154,7 +156,6 @@ def route_setup_type(message):
         msg = bot.send_message(message.chat.id, "❌ Galat Input! Kripya channel se post forward karein (ya /cancel):")
         bot.register_next_step_handler(msg, route_setup_type)
 
-# --- NAYA STEP: PRICE POOCHNE KE LIYE ---
 def channel_ask_price(message, ch_id, ch_name):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
     validity_days = message.text.strip()
@@ -162,7 +163,7 @@ def channel_ask_price(message, ch_id, ch_name):
     msg = bot.send_message(
         message.chat.id,
         f"💰 <b>ᴘʀɪᴄɪɴɢ:</b>\n"
-        f"Is <code>{validity_days}</code> Din ke subscription ke liye kitna <b>Price (₹)</b> rakhna hai? (Sirf numbers likhein, jaise: 49):",
+        f"Is <code>{validity_days}</code> Din ke liye kitna <b>Price (₹)</b> rakhna hai? (Jaise: 49):",
         parse_mode="HTML"
     )
     bot.register_next_step_handler(msg, channel_ask_photo, ch_id, ch_name, validity_days)
@@ -183,6 +184,8 @@ def channel_ask_photo(message, ch_id, ch_name, validity_days):
 
 def channel_ask_demo(message, ch_id, ch_name, validity_days, price):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
+    
+    # Check if photo forwarded or admin typed skip
     file_id = message.photo[-1].file_id if message.photo else None
     
     msg = bot.send_message(message.chat.id, "🔗 <b>Demo Link bhejein</b> (Ya 'skip' ya 'none' likhein):")
@@ -190,22 +193,25 @@ def channel_ask_demo(message, ch_id, ch_name, validity_days, price):
 
 def channel_ask_category(message, ch_id, ch_name, validity_days, price, file_id):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
+    
+    # DEMO SKIP BUG FIXED: Direct checking clean text mapping
+    raw_text = message.text.strip() if message.text else ""
+    demo = None if raw_text.lower() in ['none', 'skip', ''] else raw_text
     
     state_id = str(uuid.uuid4())[:8]
     pending_setups[state_id] = {
         "ch_id": ch_id, 
         "ch_name": ch_name,
         "validity_days": validity_days, 
-        "price": price,              # State me price save ho raha hai
+        "price": price,
         "file_id": file_id,
         "demo_link": demo
     }
     
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{story_id}"),
-        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{story_id}")
+        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{state_id}"),
+        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{state_id}")
     )
     bot.send_message(
         message.chat.id, 
@@ -215,9 +221,9 @@ def channel_ask_category(message, ch_id, ch_name, validity_days, price, file_id)
     )
 
 
-# ==========================================
-# --- 4. CALLBACK & FINAL DATABASE SAVE ---
-# ==========================================
+# =====================================================================
+# ─── 4. CALLBACK & FINAL SAVE (ALIGNED WITH store.py SCHEMA) ───
+# =====================================================================
 @bot.callback_query_handler(func=lambda call: call.data.startswith('newsrc_'))
 def handle_category_selection(call):
     if call.from_user.id != config.ADMIN_ID: return
@@ -235,13 +241,15 @@ def handle_category_selection(call):
     
     item_id = str(uuid.uuid4())[:10]
     
+    # 🌟 SAVING EXACTLY MATCHING store.py FILTERS (story_name used)
     channels_col.update_one(
         {"channel_id": data["ch_id"]}, 
         {"$set": {
             "item_id": item_id,
             "name": data["ch_name"], 
+            "story_name": data["ch_name"], # Required by store.py filter logic
             "validity": data["validity_days"], 
-            "price": data["price"],        # Database me price save ho raha hai
+            "price": data["price"],        # Added dynamically as numbers/string
             "file_id": data["file_id"],
             "demo_link": data["demo_link"],
             "source": platform, 
@@ -256,7 +264,7 @@ def handle_category_selection(call):
     bot_link = f"https://t.me/{bot_user}?start={item_id}"
     bot.send_message(
         call.message.chat.id, 
-        f"✅ <b>sᴛᴏʀʏ  sᴇᴛᴜᴘ  ғɪɴɪsʜᴇᴅ!</b>\n\n"
+        f"✅ <b>sᴛᴏʀỹ  sᴇᴛᴜᴘ  ғɪɴɪsʜᴇᴅ!</b>\n\n"
         f"📂 <b>source:</b> {platform}\n"
         f"⏱️ <b>validity:</b> {data['validity_days']} Din\n"
         f"💰 <b>price:</b> ₹{data['price']}\n"
@@ -265,9 +273,10 @@ def handle_category_selection(call):
         parse_mode="HTML"
     )
 
-# ==========================================
-# --- 5. STANDALONE MANUAL COMBO FLOW ---
-# ==========================================
+
+# =====================================================================
+# ─── 5. STANDALONE MANUAL COMBO FIXED (100% SYNCED WITH store.py) ───
+# =====================================================================
 @bot.message_handler(commands=['add_combo'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def add_combo_start(message):
     chat_id = get_chat_id(message)
@@ -275,8 +284,8 @@ def add_combo_start(message):
     
     msg = bot.send_message(
         chat_id, 
-        "🎁 <b>ᴍ_ᴀ_ɴ_ᴜ_ᴀ_ʟ  ᴄ_ᴏ_ᴍ_ʙ_ᴏ  s_ᴇ_ᴛ_ᴜ_ᴘ:</b>\n\n"
-        "➔ Apne Premium Combo Bundle ka ek mast <b>Naam (Title)</b> likh kar bhejiye:", 
+        "🎁 <b>ᴍ_ᴀ_ɴ_ᴜ_ᴀ_ʟ  <b>ᴄ_ᴏ_ᴍ_ʙ_ᴏ</b>  s_ᴇ_ᴛ_ᴜ_ᴘ:</b>\n\n"
+        "➔ Combo Pack ka Jo Naam <u>Store Board</u> par dikhana hai, wo bhejiyen:", 
         parse_mode="HTML"
     )
     bot.register_next_step_handler(msg, combo_ask_validity)
@@ -287,8 +296,8 @@ def combo_ask_validity(message):
     
     msg = bot.send_message(
         message.chat.id,
-        f"⏱️ <b>⏳ ᴠᴀʟɪᴅɪᴛʏ:</b>\n"
-        f"Yeh combo pack kitne din tak valid rakhna hai? (Sirf numbers likhein, jaise: 30):",
+        "⏱️ <b>⏳ ᴠᴀʟɪᴅɪᴛʏ:</b>\n"
+        "Yeh combo bundle kitne din tak valid rahega? (Jaise: 30):",
         parse_mode="HTML"
     )
     bot.register_next_step_handler(msg, combo_ask_price, combo_name)
@@ -299,8 +308,8 @@ def combo_ask_price(message, combo_name):
     
     msg = bot.send_message(
         message.chat.id,
-        f"💰 <b>ᴘʀɪᴄɪɴɢ:</b>\n"
-        f"Is combo pack ke liye total <b>Price (₹)</b> kitna rakhna hai? (Sirf numbers, jaise: 199):",
+        "💰 <b>ᴘʀɪᴄɪɴɢ:</b>\n"
+        "Is total combo package ka <b>Price (₹)</b> kitna rakhna hai? (Jaise: 149):",
         parse_mode="HTML"
     )
     bot.register_next_step_handler(msg, combo_ask_photo, combo_name, validity_days)
@@ -312,9 +321,9 @@ def combo_ask_photo(message, combo_name, validity_days):
     msg = bot.send_message(
         message.chat.id,
         "🖼️ <b>ᴄᴏᴍʙᴏ ᴘʜᴏᴛᴏ:</b>\n"
-        "Kya aap is combo banner ke liye koi custom photo lagana chahte hain?\n\n"
-        "➔ Ek <b>Photo</b> bhejein.\n"
-        "➔ Ya bina photo ke aage badhne ke liye <code>skip</code> likhein:",
+        "Is bundle banner ke liye koi photo lagani hai?\n\n"
+        "➔ Ek <b>Photo</b> send karein.\n"
+        "➔ Ya skip karne ke liye <code>skip</code> likhein:",
         parse_mode="HTML"
     )
     bot.register_next_step_handler(msg, combo_ask_demo, combo_name, validity_days, price)
@@ -328,40 +337,43 @@ def combo_ask_demo(message, combo_name, validity_days, price):
 
 def combo_ask_channels(message, combo_name, validity_days, price, file_id):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
-    demo = None if message.text.lower() in ['none', 'skip'] else message.text.strip()
+    
+    raw_text = message.text.strip() if message.text else ""
+    demo = None if raw_text.lower() in ['none', 'skip', ''] else raw_text
     
     msg = bot.send_message(
         message.chat.id,
         "🆔 <b>ᴄʜᴀɴɴᴇʟ ɪᴅs ʟɪsᴛ:</b>\n"
-        "Is combo bundle ke andar jo-jo channels jodhne hain, unki <b>Base IDs</b> comma ( , ) laga kar ek sath bhejiye:\n\n"
-        "➔ <code>-100123456789,-100987654321</code>",
+        "Is combo bundle ke andar aane wale saare channels ki <b>IDs</b> comma ( , ) laga kar dein:\n\n"
+        "➔ <code>-100123456,-100987654</code>",
         parse_mode="HTML"
     )
-    bot.register_next_step_handler(msg, save_manual_combo, combo_name, validity_days, price, file_id, demo)
+    bot.register_next_step_handler(msg, save_manual_combo_fixed, combo_name, validity_days, price, file_id, demo)
 
-def save_manual_combo(message, combo_name, validity_days, price, file_id, demo):
+def save_manual_combo_fixed(message, combo_name, validity_days, price, file_id, demo):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
     raw_ids = message.text.strip().replace(" ", "")
     
     try:
-        # Comma separated IDs ko extract karke integer list me map karna
         channel_ids_list = [int(cid) for cid in raw_ids.split(",") if cid]
     except ValueError:
         msg = bot.send_message(message.chat.id, "❌ <b>Format Error!</b> Keval IDs aur comma ka use karein. Dobara valid IDs bhejein:")
-        return bot.register_next_step_handler(msg, save_manual_combo, combo_name, validity_days, price, file_id, demo)
+        return bot.register_next_step_handler(msg, save_manual_combo_fixed, combo_name, validity_days, price, file_id, demo)
 
     item_id = f"combo_{str(uuid.uuid4())[:10]}"
     
-    # Final database record write with 'type': 'combo' and source locked as 'combo'
+    # 🌟 SCHEMA ALIGNED 100% WITH store.py COMBO FILTER FIXED 
     channels_col.insert_one({
         "item_id": item_id,
         "name": combo_name,
+        "combo_name": combo_name,       # Required by store.py: item['combo_name']
+        "is_combo": True,               # Required by store.py: {"is_combo": True}
         "validity": validity_days,
-        "price": price,
+        "price": price,                 # Aligned with [ ₹{item['price']} ] display
         "file_id": file_id,
         "demo_link": demo,
         "channels_list": channel_ids_list,
-        "source": "combo",
+        "source": "combo",              # Clean mapping anchor
         "type": "combo"
     })
     
@@ -369,17 +381,18 @@ def save_manual_combo(message, combo_name, validity_days, price, file_id, demo):
     bot_link = f"https://t.me/{bot_user}?start={item_id}"
     
     success_text = (
-        f"✅ <b>ᴄᴏᴍʙᴏ  sᴇᴛᴜᴘ  ꜰɪɴɪsʜᴇᴅ!</b>\n\n"
-        f"🎁 <b>ᴄᴏᴍʙᴏ:</b> <code>{combo_name}</code>\n"
-        f"📂 <b>source:</b> <code>combo</code>\n"
-        f"⏱️ <b>validity:</b> {validity_days} Din\n"
-        f"💰 <b>price:</b> ₹{price}\n"
-        f"📊 <b>ᴄʜᴀɴɴᴇʟs:</b> {len(channel_ids_list)} Linked\n"
-        f"📺 <b>demo:</b> {demo if demo else 'None'}\n\n"
-        f"🔗 <b>ʟɪɴᴋ:</b> <code>{bot_link}</code>"
+        f"✅ <b>🎁 sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ sᴀᴠᴇᴅ ɪɴ sᴛᴏʀᴇ!</b>\n"
+        f"──────────────────────────\n"
+        f"🎁 <b>ᴄᴏᴍʙᴏ ɴᴀᴍᴇ:</b> <code>{combo_name}</code>\n"
+        f"⏱️ <b>ᴠᴀʟɪᴅɪᴛʏ:</b> {validity_days} Din\n"
+        f"💰 <b>ᴘʀɪᴄᴇ:</b> ₹{price}\n"
+        f"📊 <b>ᴄʜᴀɴɴᴇʟs:</b> {len(channel_ids_list)} Linked\n\n"
+        f"🔗 <b>sʜᴀʀᴇ ʟɪɴᴋ (ᴜsᴇʀs):</b>\n<code>{bot_link}</code>\n"
+        f"──────────────────────────"
     )
     
     if file_id:
         bot.send_photo(message.chat.id, photo=file_id, caption=success_text, parse_mode="HTML")
     else:
         bot.send_message(message.chat.id, text=success_text, parse_mode="HTML")
+    
