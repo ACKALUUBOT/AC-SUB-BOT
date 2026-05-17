@@ -280,7 +280,7 @@ def handle_category_selection(call):
 
 
 # =====================================================================
-# ─── 5. STANDALONE MANUAL COMBO FLOW (/add_combo) ───
+# ─── 5. STANDALONE MANUAL COMBO FIXED (100% SYNCED WITH store.py) ───
 # =====================================================================
 @bot.message_handler(commands=['add_combo'], func=lambda m: m.from_user.id == config.ADMIN_ID)
 def add_combo_start(message):
@@ -305,7 +305,7 @@ def combo_ask_validity(message):
         "Yeh combo bundle kitne din tak valid rahega? (Jaise: 30):",
         parse_mode="HTML"
     )
-    bot.register_next_step_handler(combo_ask_price, combo_name)
+    bot.register_next_step_handler(msg, combo_ask_price, combo_name)
 
 def combo_ask_price(message, combo_name):
     if message.text == "/cancel": return bot.send_message(message.chat.id, "❌ Cancelled.")
@@ -367,17 +367,18 @@ def save_manual_combo_fixed(message, combo_name, validity_days, price, file_id, 
 
     item_id = f"combo_{str(uuid.uuid4())[:10]}"
     
+    # 🌟 SCHEMA ALIGNED 100% WITH store.py COMBO FILTER FIXED 
     channels_col.insert_one({
         "item_id": item_id,
         "name": combo_name,
-        "combo_name": combo_name,       
-        "is_combo": True,               
+        "combo_name": combo_name,       # Required by store.py: item['combo_name']
+        "is_combo": True,               # Required by store.py: {"is_combo": True}
         "validity": validity_days,
-        "price": price,                 
+        "price": price,                 # Aligned with [ ₹{item['price']} ] display
         "file_id": file_id,
         "demo_link": demo,
         "channels_list": channel_ids_list,
-        "source": "combo",              
+        "source": "combo",              # Clean mapping anchor
         "type": "combo"
     })
     
@@ -389,7 +390,7 @@ def save_manual_combo_fixed(message, combo_name, validity_days, price, file_id, 
         f"──────────────────────────\n"
         f"🎁 <b>ᴄᴏᴍʙᴏ ɴᴀᴍᴇ:</b> <code>{combo_name}</code>\n"
         f"⏱️ <b>ᴠᴀʟɪᴅɪᴛʏ:</b> {validity_days} Din\n"
-        f"💰 <b>ᴘʀɪᴄɪɴɢ:</b> ₹{price}\n"
+        f"💰 <b>ᴘʀɪᴄᴇ:</b> ₹{price}\n"
         f"📊 <b>ᴄʜᴀɴɴᴇʟs:</b> {len(channel_ids_list)} Linked\n\n"
         f"🔗 <b>sʜᴀʀᴇ ʟɪɴᴋ (ᴜsᴇʀs):</b>\n<code>{bot_link}</code>\n"
         f"──────────────────────────"
@@ -399,3 +400,4 @@ def save_manual_combo_fixed(message, combo_name, validity_days, price, file_id, 
         bot.send_photo(message.chat.id, photo=file_id, caption=success_text, parse_mode="HTML")
     else:
         bot.send_message(message.chat.id, text=success_text, parse_mode="HTML")
+    
