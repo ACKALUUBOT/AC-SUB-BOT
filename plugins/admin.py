@@ -210,12 +210,12 @@ def channel_ask_category(message, ch_id, ch_name, validity_days, price, file_id)
     
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{state_id}"),
-        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{state_id}")
+        InlineKeyboardButton("pocket", callback_data=f"newsrc_pocket_{story_id}"),
+        InlineKeyboardButton("pratilipi", callback_data=f"newsrc_pratilipi_{story_id}")
     )
     bot.send_message(
         message.chat.id, 
-        "📂 <b>Select Category (small text):</b>", 
+        "📂 <b>Select Category:</b>", 
         reply_markup=markup, 
         parse_mode="HTML"
     )
