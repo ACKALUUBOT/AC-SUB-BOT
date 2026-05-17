@@ -47,7 +47,7 @@ def confirm_step(call):
     
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
-        InlineKeyboardButton("💳 ᴘᴀʏ ᴠɪᴀ ǫʀ sᴄᴀɴ", callback_data=f"man_{item_id}_{mins}_qr"),
+        InlineKeyboardButton("💳 ᴘᴀʏ ᴠɪ VIA ǫʀ sᴄᴀɴ", callback_data=f"man_{item_id}_{mins}_qr"),
         InlineKeyboardButton("📲 ᴘᴀʏ ᴠɪ VIA ᴜᴘɪ ɪᴅ", callback_data=f"man_{item_id}_{mins}_upi"),
         InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇɴᴛ", callback_data="cancel_payment")
     )
@@ -129,7 +129,7 @@ def send_request_to_admin(message, item_id, mins):
         return send_home_menu(message.chat.id)
 
     if message.content_type != 'photo':
-        markup = InlineKeyboardMarkup().add(InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇɴᴛ", callback_data="cancel_payment"))
+        markup = InlineKeyboardMarkup().add(InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ ᴘᴀʏᴍᴇNT", callback_data="cancel_payment"))
         msg = bot.send_message(
             message.chat.id, 
             "❌ Please sirf Photo (Screenshot) bhejein!\n"
@@ -148,7 +148,7 @@ def send_request_to_admin(message, item_id, mins):
         return bot.send_message(message.chat.id, "❌ Something went wrong, item not found!")
 
     display_name = data.get('combo_name') or data.get('story_name') or data.get('name')
-    bot.send_message(message.chat.id, "⏳ <b><b>ʀᴇǫᴜᴇsᴛ sᴇɴᴛ!</b></b>\nAdmin check karke aapka access on kar dega.")
+    bot.send_message(message.chat.id, "⏳ <b>ʀᴇǫᴜᴇsᴛ sᴇɴᴛ!</b>\nAdmin check karke aapka access on kar dega.")
     
     markup = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("✅ Approve", callback_data=f"app_{message.from_user.id}_{item_id}_{mins}"),
@@ -186,9 +186,9 @@ def admin_approve(call):
     expiry = int(time.time()) + (int(mins) * 60) if mins != 'manual' else int(time.time()) + (365*24*60*60)
     markup = InlineKeyboardMarkup(row_width=1)
 
-        # ─── CASE A: COMBO PACK APPROVAL ───
+    # ─── CASE A: COMBO PACK APPROVAL ───
     if data.get('is_combo') and 'channels_list' in data:
-        msg = "🎁 <b><b><b><b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋ ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b></b></b>\n\nAapko sabhi linked channels ka access de diya gaya hai. Niche diye buttons se join karein:\n\n"
+        msg = "🎁 <b>ᴄᴏᴍʙᴏ ᴘᴀᴄᴋ ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nAapko sabhi linked channels ka access de diya gaya hai. Niche diye buttons se join karein:\n\n"
         for ch_id in data['channels_list']:
             users_col.update_one({"user_id": int(u_id), "channel_id": int(ch_id)}, {"$set": {"expiry": expiry}}, upsert=True)
             try:
@@ -200,9 +200,9 @@ def admin_approve(call):
                 print(f"Combo Link Error: {e}")
         msg += "⚠️ <i>Links single-use hain, ek baar join hone ke baad automatic expire ho jayengi!</i>"
 
-    # ─── CASE B: FORWARDED CHANNEL (/add Flow) [FIXED BY TYPE] ───
-    # Yahan pehle data.get('story_name') check ho raha tha, ab hum dynamic 'type' check karenge
-    elif data.get('type') == 'channel' or ('channel_id' in data and data.get('source') not in ['pocket', 'pratilipi']):
+    # ─── CASE B: FORWARDED CHANNEL (/add Flow) [100% FIXED] ───
+    # strict type matching engine, is_combo bypass block rule applied
+    elif data.get('type') == 'channel' or ('channel_id' in data and data.get('source') not in ['pocket', 'pratilipi'] and not data.get('is_combo')):
         target_channel = int(data['channel_id'])
         users_col.update_one({"user_id": int(u_id), "channel_id": target_channel}, {"$set": {"expiry": expiry}}, upsert=True)
         try:
@@ -212,9 +212,9 @@ def admin_approve(call):
             
             validity_display = data.get('validity', mins)
             msg = (
-                f"✅ <b><b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b></b>\n\n"
+                f"✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\n"
                 f"📂 <b>ᴄʜᴀɴɴᴇʟ:</b> <b>{data.get('name', 'VIP Channel')}</b>\n"
-                f"⏱️ <b><b>ᴠᴀʟɪᴅɪᴛʏ:</b></b> {validity_display if validity_display != 'manual' else 'Lifetime'}\n\n"
+                f"⏱️ <b>ᴠᴀʟɪᴅɪᴛʏ:</b> {validity_display if validity_display != 'manual' else 'Lifetime'}\n\n"
                 f"Join karne ke liye neeche button par click karein:\n\n"
                 f"⚠️ <i>Yeh link single use hai, ek baar use hone ke baad automatic expire ho jayegi!</i>"
             )
@@ -235,35 +235,13 @@ def admin_approve(call):
             f"────────────────────\n"
             f"📖 <b>sᴛᴏʀỹ:</b> {data.get('story_name', 'Premium Story')}"
             f"{platform_info}\n"
-            f"💰 <b><b>ᴘ...ʀɪᴄᴇ:</b></b> ₹{data.get('price', '49')}\n"
-            f"────────────────────\n"
-            f"➔ Niche diye gaye button par click karke apni full story access karein 👇"
-        )
-
-        except Exception as e: 
-            print(f"Error: {e}")
-            msg = "✅ <b>ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n\nBot link generate nahi kar saka, admin rights setup check karein."
-
-    # ─── CASE C: MANUAL PREMIUM STORY (/add_story Flow) ───
-    else:
-        users_col.update_one({"user_id": int(u_id), "channel_id": data.get('channel_id', 0)}, {"$set": {"expiry": expiry}}, upsert=True)
-        target_link = data.get('bot_link') or data.get('final_link') or 'https://t.me'
-        
-        markup.add(InlineKeyboardButton("🚀 sᴛᴀʀᴛ sᴛᴏʀỹ", url=target_link))
-        
-        platform_info = f"\n📂 Platform: <code>{data.get('source')}</code>" if data.get('source') else ""
-        msg = (
-            f"🎉 <b>ᴘᴀʏᴍᴇɴᴛ ᴀᴘᴘʀᴏᴠᴇᴅ!</b>\n"
-            f"────────────────────\n"
-            f"📖 <b>sᴛᴏʀʏ:</b> {data.get('story_name', 'Premium Story')}"
-            f"{platform_info}\n"
-            f"💰 <b><b>ᴘʀɪᴄᴇ:</b></b> ₹{data.get('price', '49')}\n"
+            f"💰 <b>ᴘʀɪᴄᴇ:</b> ₹{data.get('price', '49')}\n"
             f"────────────────────\n"
             f"➔ Niche diye gaye button par click karke apni full story access karein 👇"
         )
 
     try:
-        if 'story_name' in data and data.get('file_id'):
+        if 'story_name' in data and data.get('file_id') and data.get('type') != 'channel':
             bot.send_photo(u_id, photo=data['file_id'], caption=msg, reply_markup=markup, parse_mode="HTML", protect_content=True)
         else:
             bot.send_message(u_id, msg, reply_markup=markup, parse_mode="HTML", protect_content=True)
