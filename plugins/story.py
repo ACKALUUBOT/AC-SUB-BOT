@@ -55,7 +55,7 @@ def get_final_link(message, story_name, demo, file_id):
     msg = bot.send_message(message.chat.id, "💰 <b><b>ᴘʀɪᴄᴇ:</b></b>\nSirf number likhein (Example: 49):")
     bot.register_next_step_handler(msg, ask_category, story_name, demo, final_link, file_id)
 
-# Price lene ke baad platform poochne ke liye inline buttons (Short Names ke sath)
+# Price lene ke baad platform poochne ke liye inline buttons
 def ask_category(message, story_name, demo, final_link, file_id):
     if not message.text or not message.text.isdigit():
         msg = bot.send_message(message.chat.id, "❌ Price sirf number mein likhein:")
@@ -77,29 +77,29 @@ def ask_category(message, story_name, demo, final_link, file_id):
         "status": "pending" 
     })
 
-    # Keyboard buttons par ab sirf "Pocket" aur "Pratilipi" dikhega
+    # Callback data aur text dono ko strict lowercase kiya hai
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("🎧 Pocket", callback_data=f"src_pocket_{story_id}"),
-        InlineKeyboardButton("📚 Pratilipi", callback_data=f"src_pratilipi_{story_id}")
+        InlineKeyboardButton("🎧 pocket", callback_data=f"src_pocket_{story_id}"),
+        InlineKeyboardButton("📚 pratilipi", callback_data=f"src_pratilipi_{story_id}")
     )
 
     bot.send_message(
         message.chat.id, 
-        "📂 <b>ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:</b>\nYeh story kiski hai?", 
+        "📂 <b><b>ᴄᴀᴛᴇɢᴏʀʏ sᴇʟᴇᴄᴛ ᴋᴀʀᴇɪɴ:</b></b>\nYeh story kiski hai?", 
         reply_markup=markup, 
         parse_mode="HTML"
     )
 
-# Button press hone par short name save hoga
+# Button press hone par platform ka naam small letter me save hoga
 @bot.callback_query_handler(func=lambda call: call.data.startswith('src_'))
 def save_story_with_source(call):
     if call.from_user.id != config.ADMIN_ID:
         return bot.answer_callback_query(call.id, "Unauthorized!")
 
     parts = call.data.split('_')
-    # Yahan humne badal kar sirf "Pocket" aur "Pratilipi" kar diya hai
-    platform = "Pocket" if parts[1] == "pocket" else "Pratilipi"
+    # Fixed: Ab database mein strictly lowercase 'pocket' ya 'pratilipi' hi save hoga
+    platform = "pocket" if parts[1] == "pocket" else "pratilipi"
     story_id = parts[2]
 
     # Database document update
@@ -124,7 +124,7 @@ def save_story_with_source(call):
         f"✅ <b>sᴛᴏʀʏ ᴀᴅᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!</b>\n"
         f"────────────────────\n"
         f"📖 Name: <b>{story_data['story_name']}</b>\n"
-        f"📂 Platform: <b>{platform}</b>\n"
+        f"📂 Platform: <code>{platform}</code>\n"  # Code style me small dikhega
         f"💰 Price: <b>₹{story_data['price']}</b>\n"
         f"🖼️ Media: <b>{'Saved' if story_data['file_id'] else 'No Photo'}</b>\n\n"
         f"🔗 <b>ʏᴏᴜʀ sʜᴀʀᴇ ʟɪɴᴋ:</b>\n<code>{share_link}</code>\n"
