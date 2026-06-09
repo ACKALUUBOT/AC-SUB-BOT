@@ -1,9 +1,9 @@
 import json
 import razorpay
-# render_template_string ko import kiya taaki HTML ko yahi se serve kar sakein
-from flask import Flask, request, abort, render_template_string
+from flask import Flask, request, abort, render_template_string, jsonify
 import config
-from utils import approve_user_logic
+from utils import approve_user_logic, bot
+from database import channels_col, users_col, db # Database collections import kiye
 
 app = Flask('')
 
@@ -15,10 +15,44 @@ if config.RZP_KEY_ID and config.RZP_KEY_SECRET:
 def home(): 
     return "Healthy"
 
+# ─── 🌟 API ENDPOINT: FETCH LIVE STORIES FROM MONGO ───
+@app.route('/api/get_stories', methods=['GET'])
+def get_stories_api():
+    try:
+        # MongoDB se saare records fetch karke JSON friendly format me convert karna
+        raw_stories = list(channels_col.find({}))
+        stories_list = []
+        
+        for item in raw_stories:
+            # MongoDB flow ke anusaar fields check karna
+            is_combo = item.get('is_combo', False)
+            
+            story_id = str(item.get('item_id') or item.get('channel_id') or item.get('_id'))
+            title = item.get('combo_name') if is_combo else item.get('story_name', item.get('name', 'Premium Show'))
+            
+            # Agar image file_id hai toh default poster lagana ya direct cloud link
+            cover = item.get('demo_link') if (item.get('demo_link') and item.get('demo_link').startswith('http')) else 'https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?q=80&w=600'
+            
+            stories_list.append({
+                "id": story_id,
+                "title": title,
+                "category": "trending" if (is_combo or item.get('source') == 'pocket') else "new",
+                "rating": "4.9",
+                "episodes": "Combo Pack" if is_combo else "Full Access Track",
+                "tag": "Combo" if is_combo else item.get('source', 'Audio').capitalize(),
+                "badge": "✨ SAVINGS" if is_combo else "🔥 VIP PICK",
+                "cover": cover,
+                "adLink": f"https://t.me/{bot.get_me().username}?start={story_id}"
+            })
+            
+        return jsonify({"success": True, "stories": stories_list})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # ─── 🌟 MINI APP DYNAMIC HTML ROUTE ───
 @app.route('/miniapp')
 def miniapp():
-    # Aapka diya hua premium front-end dashboard code
     html_content = """
     <!DOCTYPE html>
     <html lang="en">
@@ -65,10 +99,7 @@ def miniapp():
                     <span class="text-2xl font-black tracking-tighter text-white">AC<span class="text-amber-500 font-extrabold text-[10px] ml-1 bg-gradient-to-r from-amber-500/20 to-orange-500/10 px-2 py-0.5 rounded border border-amber-500/30 tracking-wide">PREMIUM</span></span>
                 </div>
                 <div class="flex items-center space-x-3 text-sm text-gray-400">
-                    <div onclick="switchTab('admin')" id="header-admin-indicator" class="hidden text-[10px] bg-red-500/10 text-red-400 border border-red-500/30 px-2.5 py-1 rounded-full font-black cursor-pointer animate-pulse">
-                        <i class="fa-solid fa-user-gear mr-1"></i> Console
-                    </div>
-                    <div id="global-membership-status" class="text-[10px] bg-neutral-900 text-neutral-400 border border-neutral-800 px-2.5 py-1 rounded-full font-bold">🚫 NO PASS</div>
+                    <div id="global-membership-status" class="text-[10px] bg-neutral-900 text-neutral-400 border border-neutral-800 px-2.5 py-1 rounded-full font-bold">🚫 GUEST</div>
                 </div>
             </header>
 
@@ -90,9 +121,9 @@ def miniapp():
 
                     <div class="flex space-x-2.5 overflow-x-auto hide-scrollbar py-1">
                         <button onclick="filterByTag('All')" class="bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-extrabold px-4 py-2 rounded-full whitespace-nowrap tag-filter-btn shadow-md">All Premium Shows</button>
-                        <button onclick="filterByTag('Romance')" class="bg-neutral-900/80 text-neutral-400 border border-neutral-800 text-xs font-bold px-4 py-2 rounded-full whitespace-nowrap tag-filter-btn transition-all">💕 Romance</button>
-                        <button onclick="filterByTag('Thriller')" class="bg-neutral-900/80 text-neutral-400 border border-neutral-800 text-xs font-bold px-4 py-2 rounded-full whitespace-nowrap tag-filter-btn transition-all">👁️ Thriller</button>
-                        <button onclick="filterByTag('Action')" class="bg-neutral-900/80 text-neutral-400 border border-neutral-800 text-xs font-bold px-4 py-2 rounded-full whitespace-nowrap tag-filter-btn transition-all">⚡ Action</button>
+                        <button onclick="filterByTag('Pocket')" class="bg-neutral-900/80 text-neutral-400 border border-neutral-800 text-xs font-bold px-4 py-2 rounded-full whitespace-nowrap tag-filter-btn transition-all">🎧 Pocket FM</button>
+                        <button onclick="filterByTag('Pratilipi')" class="bg-neutral-900/80 text-neutral-400 border border-neutral-800 text-xs font-bold px-4 py-2 rounded-full whitespace-nowrap tag-filter-btn transition-all">🎬 Pratilipi FM</button>
+                        <button onclick="filterByTag('Combo')" class="bg-neutral-900/80 text-neutral-400 border border-neutral-800 text-xs font-bold px-4 py-2 rounded-full whitespace-nowrap tag-filter-btn transition-all">🎁 Special Combo</button>
                     </div>
 
                     <div class="space-y-3">
@@ -126,7 +157,7 @@ def miniapp():
                     </div>
                     
                     <div class="space-y-4">
-                        <div onclick="openPaymentGateway('7 Days VIP Pass', '15', 7)" class="bg-gradient-to-r from-neutral-900 to-neutral-950 p-5 rounded-2xl border border-neutral-800 flex justify-between items-center relative overflow-hidden cursor-pointer active:scale-98 transition-all">
+                        <div onclick="redirectToBotPayment('7_days')" class="bg-gradient-to-r from-neutral-900 to-neutral-950 p-5 rounded-2xl border border-neutral-800 flex justify-between items-center cursor-pointer active:scale-98 transition-all">
                             <div class="space-y-1">
                                 <span class="text-[9px] font-black bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded uppercase">Trial Plan</span>
                                 <h3 class="text-lg font-black text-white">7 Days VIP Access</h3>
@@ -134,12 +165,11 @@ def miniapp():
                             </div>
                             <div class="text-right">
                                 <span class="text-2xl font-black text-amber-500">₹15</span>
-                                <p class="text-[9px] text-neutral-500 font-bold uppercase mt-1">Pay Once</p>
+                                <p class="text-[9px] text-neutral-500 font-bold uppercase mt-1">Open Bot</p>
                             </div>
                         </div>
 
-                        <div onclick="openPaymentGateway('15 Days Premium Pass', '25', 15)" class="bg-gradient-to-r from-neutral-900 to-neutral-950 p-5 rounded-2xl border border-amber-500/30 flex justify-between items-center relative overflow-hidden cursor-pointer active:scale-98 transition-all ring-1 ring-amber-500/20">
-                            <div class="absolute right-0 top-0 bg-gradient-to-l from-amber-500 to-orange-500 text-black text-[8px] font-black uppercase tracking-wider px-3 py-1 rounded-bl-xl shadow">Best Budget</div>
+                        <div onclick="redirectToBotPayment('15_days')" class="bg-gradient-to-r from-neutral-900 to-neutral-950 p-5 rounded-2xl border border-amber-500/30 flex justify-between items-center cursor-pointer active:scale-98 transition-all ring-1 ring-amber-500/20">
                             <div class="space-y-1">
                                 <span class="text-[9px] font-black bg-orange-500/20 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded uppercase">Superhits Choice</span>
                                 <h3 class="text-lg font-black text-white">15 Days Premium Pass</h3>
@@ -147,26 +177,9 @@ def miniapp():
                             </div>
                             <div class="text-right">
                                 <span class="text-2xl font-black text-amber-400">₹25</span>
-                                <p class="text-[9px] text-neutral-500 font-bold uppercase mt-1">Pay Once</p>
+                                <p class="text-[9px] text-neutral-500 font-bold uppercase mt-1">Open Bot</p>
                             </div>
                         </div>
-
-                        <div onclick="openPaymentGateway('1 Month Platinum Club', '50', 30)" class="bg-gradient-to-r from-neutral-900 to-neutral-950 p-5 rounded-2xl border border-neutral-800 flex justify-between items-center relative overflow-hidden cursor-pointer active:scale-98 transition-all premium-glow">
-                            <div class="space-y-1">
-                                <span class="text-[9px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded uppercase">Ultimate Value</span>
-                                <h3 class="text-lg font-black text-white">1 Month Club Card</h3>
-                                <p class="text-[11px] text-neutral-500 font-medium">30 Days unlimited entertainment freedom</p>
-                            </div>
-                            <div class="text-right">
-                                <span class="text-2xl font-black text-emerald-400">₹50</span>
-                                <p class="text-[9px] text-neutral-500 font-bold uppercase mt-1">Pay Once</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="pt-2 space-y-3">
-                        <h4 class="text-xs font-bold text-neutral-400 uppercase tracking-wider">Your Transaction Status</h4>
-                        <div class="space-y-3" id="orders-list-container"></div>
                     </div>
                 </div>
 
@@ -180,53 +193,6 @@ def miniapp():
                         <div>
                             <h3 id="profile-name" class="text-base font-extrabold text-white">AC Guest User</h3>
                             <p id="profile-id" class="text-[11px] text-neutral-500 font-mono mt-0.5 tracking-wide">ID: ---------</p>
-                            <span id="profile-badge" class="inline-flex items-center gap-1 text-[9px] font-black bg-neutral-800 text-neutral-400 px-2.5 py-0.5 rounded-md mt-1.5 border border-neutral-700 uppercase tracking-wider">🚫 NO MEMBERSHIP</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="page-admin" class="hidden space-y-6">
-                    <div class="border-b border-neutral-800 pb-3">
-                        <h2 class="text-base font-black text-amber-500 uppercase tracking-wider"><i class="fa-solid fa-shield-halved"></i> Cloud Administration</h2>
-                    </div>
-                    <div class="bg-neutral-900/40 p-5 rounded-2xl border border-neutral-800 space-y-3">
-                        <h3 class="text-xs font-black text-amber-500 uppercase tracking-wider"><i class="fa-solid fa-receipt mr-1"></i> 1. Pending Membership Passes Verification</h3>
-                        <div class="space-y-3.5 text-xs" id="admin-requests-container"></div>
-                    </div>
-                    <div class="bg-neutral-900/40 p-5 rounded-2xl border border-neutral-800 space-y-3">
-                        <h3 class="text-xs font-black text-amber-500 uppercase tracking-wider">2. Launch New Audio Show</h3>
-                        <div class="space-y-3 text-xs">
-                            <input type="text" id="form-title" placeholder="Show Title *" class="w-full bg-neutral-950 border border-neutral-800 p-3.5 rounded-xl focus:outline-none text-white font-medium">
-                            <input type="text" id="form-cover" placeholder="Cover Image URL *" class="w-full bg-neutral-950 border border-neutral-800 p-3.5 rounded-xl focus:outline-none text-white font-medium">
-                            <input type="text" id="form-adlink" placeholder="Telegram URL or Ad File Message ID *" class="w-full bg-neutral-950 border border-neutral-800 p-3.5 rounded-xl focus:outline-none text-white font-medium">
-                            <div class="grid grid-cols-2 gap-3">
-                                <input type="text" id="form-episodes" placeholder="Episodes (e.g. 150 Parts) *" class="w-full bg-neutral-950 border border-neutral-800 p-3.5 rounded-xl focus:outline-none text-white font-medium">
-                                <input type="text" id="form-id" placeholder="Telegram URL or Premium File Message ID *" class="w-full bg-neutral-950 border border-neutral-800 p-3.5 rounded-xl focus:outline-none text-white font-medium">
-                            </div>
-                            <div class="grid grid-cols-2 gap-3">
-                                <select id="form-tag" class="w-full bg-neutral-950 border border-neutral-800 p-3.5 rounded-xl focus:outline-none text-white font-medium">
-                                    <option value="Romance">💕 Romance</option>
-                                    <option value="Thriller">👁️ Thriller</option>
-                                    <option value="Action">⚡ Action</option>
-                                </select>
-                                <select id="form-category" class="w-full bg-neutral-950 border border-neutral-800 p-3.5 rounded-xl focus:outline-none text-white font-medium">
-                                    <option value="trending">🔥 Top Trending Section</option>
-                                    <option value="new">✨ New Launch Section</option>
-                                </select>
-                            </div>
-                            <input type="text" id="form-badge" placeholder="Badge Overlay text (e.g. POPULAR)" class="w-full bg-neutral-950 border border-neutral-800 p-3.5 rounded-xl focus:outline-none text-white font-medium">
-                            <button onclick="saveNewStory()" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-black py-4 rounded-xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Launch Permanently</button>
-                        </div>
-                    </div>
-                    <div class="bg-neutral-900/40 p-5 rounded-2xl border border-neutral-800 space-y-3">
-                        <h3 class="text-xs font-black text-red-500 uppercase tracking-wider"><i class="fa-solid fa-trash-can mr-1"></i> 3. Manage & Delete Stories</h3>
-                        <div class="space-y-2 text-xs" id="admin-stories-delete-container"></div>
-                    </div>
-                    <div class="bg-neutral-900/40 p-5 rounded-2xl border border-neutral-800 space-y-3">
-                        <h3 class="text-xs font-black text-rose-500 uppercase tracking-wider"><i class="fa-solid fa-user-minus mr-1"></i> 4. Revoke / Remove User Premium</h3>
-                        <div class="space-y-3 text-xs">
-                            <input type="number" id="form-revoke-userid" placeholder="Enter Telegram User ID *" class="w-full bg-neutral-950 border border-neutral-800 p-3.5 rounded-xl focus:outline-none text-white font-medium font-mono">
-                            <button onclick="revokeUserPremium()" class="w-full bg-gradient-to-r from-red-600 to-rose-700 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Revoke Premium Access</button>
                         </div>
                     </div>
                 </div>
@@ -245,11 +211,6 @@ def miniapp():
                                 <span class="text-amber-400">⭐ 4.9 Rating</span>
                                 <span class="text-neutral-500">•</span>
                                 <span id="detail-episodes" class="text-neutral-200"></span>
-                                <span class="text-neutral-500">•</span>
-                                <span id="detail-genre" class="text-amber-400"></span>
-                            </div>
-                            <div class="text-[11px] text-neutral-400 font-semibold flex items-center gap-1.5 opacity-90">
-                                <i class="fa-solid fa-headphones text-amber-500"></i> Platinum VIP Exclusive Series
                             </div>
                         </div>
                     </div>
@@ -257,54 +218,19 @@ def miniapp():
                 </div>
             </main>
 
-            <div id="payment-modal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-end justify-center backdrop-blur-sm">
-                <div class="bg-[#0b0b0e] border-t border-neutral-800 w-full max-w-md rounded-t-[2.5rem] p-6 space-y-5 shadow-2xl overflow-y-auto max-h-[88vh]">
-                    <div class="flex justify-between items-center pb-2 border-b border-neutral-900">
-                        <h3 class="text-xs font-black uppercase tracking-widest text-neutral-400"><i class="fa-solid fa-fingerprint text-amber-500 mr-1"></i> VIP Native Route</h3>
-                        <button onclick="document.getElementById('payment-modal').classList.add('hidden')" class="text-neutral-500 text-lg p-1.5 hover:text-white transition-all"><i class="fa-solid fa-xmark"></i></button>
-                    </div>
-                    <div class="bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-500/20 rounded-2xl p-4 text-center">
-                        <span id="modal-plan-title" class="text-[10px] text-neutral-400 font-bold block uppercase tracking-wider">Plan Selected</span>
-                        <h2 id="modal-pay-price" class="text-3xl font-black text-amber-500 tracking-tight">---</h2>
-                    </div>
-                    <div class="space-y-2.5 text-xs">
-                        <p class="text-[11px] text-neutral-400 font-semibold">👉 **Step 1:** Complete pay transaction via local UPI applications safely on this VPA Address: <span class="text-amber-400 font-mono font-bold select-all bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800">6398324472@fam</span></p>
-                        <button onclick="triggerUPIDeepLink()" class="w-full bg-neutral-900 border border-neutral-800 text-white py-3.5 rounded-xl font-extrabold flex items-center justify-center gap-2.5 active:scale-95 transition-all shadow-md">
-                            <i class="fa-solid fa-mobile-screen text-amber-500 text-sm"></i> Secure Launch UPI Apps
-                        </button>
-                    </div>
-                    <div class="border-t border-neutral-900 pt-4 space-y-2.5 text-xs">
-                        <p class="text-[11px] text-neutral-400 font-semibold">👉 **Step 2:** Paste your verified 12-Digit Reference/UTR code token below:</p>
-                        <input type="number" id="payment-utr-input" placeholder="Enter 12-Digit UTR Number *" class="w-full bg-neutral-950 border border-neutral-800 p-4 rounded-xl text-center font-mono tracking-[0.2em] text-white text-base focus:outline-none focus:border-amber-500 placeholder:text-neutral-700 placeholder:text-xs placeholder:tracking-normal font-bold">
-                        <button id="submit-utr-btn" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-black py-4 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center space-x-2 shadow-xl active:scale-95 transition-all premium-glow mt-1">
-                            <span>Submit Code For Activation</span> <i class="fa-solid fa-paper-plane text-xs"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
             <nav class="fixed bottom-5 left-5 right-5 h-18 glass-nav rounded-2xl flex justify-around items-center z-40 px-3 shadow-2xl">
                 <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center text-amber-500 text-[10px] font-black uppercase tracking-wider gap-1 transition-all"><i class="fa-solid fa-house-chimney text-base"></i><span>Home</span></button>
                 <button onclick="switchTab('explore')" id="nav-explore" class="flex flex-col items-center text-neutral-500 text-[10px] font-black uppercase tracking-wider gap-1 transition-all"><i class="fa-solid fa-compass text-base"></i><span>Explore</span></button>
                 <button onclick="switchTab('plans')" id="nav-plans" class="flex flex-col items-center text-neutral-500 text-[10px] font-black uppercase tracking-wider gap-1 transition-all"><i class="fa-solid fa-gem text-base"></i><span>VIP Pass</span></button>
                 <button onclick="switchTab('profile')" id="nav-profile" class="flex flex-col items-center text-neutral-500 text-[10px] font-black uppercase tracking-wider gap-1 transition-all"><i class="fa-solid fa-user-astronaut text-base"></i><span>Profile</span></button>
-                <button onclick="switchTab('admin')" id="nav-admin" class="hidden flex flex-col items-center text-red-500/70 text-[10px] font-black uppercase tracking-wider gap-1 transition-all"><i class="fa-solid fa-gears text-base"></i><span>Admin</span></button>
             </nav>
         </div>
 
         <script>
-            const ADMIN_ID = 5898522531; 
-            const STORE_UPI_ID = "6398324472@fam";
-            const defaultStories = [];
-
-            let storiesData = localStorage.getItem('ac_vip_db') ? JSON.parse(localStorage.getItem('ac_vip_db')) : defaultStories;
-            let membershipRequests = localStorage.getItem('ac_vip_m_requests') ? JSON.parse(localStorage.getItem('ac_vip_m_requests')) : [];
-            
+            let storiesData = [];
             let currentUserId = 0;
-            let userMembershipExpiry = 0; 
             let activeSliderIndex = 0;
             let sliderTimer = null;
-            let currentTargetPlan = null; 
             let viewStoryId = "";
 
             const tg = window.Telegram.WebApp;
@@ -312,20 +238,7 @@ def miniapp():
 
             window.addEventListener('load', () => {
                 setupUserSessionData();
-                setTimeout(() => {
-                    const splash = document.getElementById('splash-screen');
-                    if(splash) splash.remove();
-                    document.getElementById('main-app').classList.remove('hidden');
-                    
-                    refreshAppDOM();
-                    startAutoBannerCarousel();
-                    
-                    const startParam = tg.initDataUnsafe?.start_param;
-                    if(startParam && startParam.startsWith('file_')) {
-                        const extractedId = startParam.replace('file_', '');
-                        openDetails(extractedId);
-                    }
-                }, 1200);
+                fetchLiveStories(); // Live database items call karna
             });
 
             function setupUserSessionData() {
@@ -333,57 +246,41 @@ def miniapp():
                     const user = tg.initDataUnsafe?.user;
                     if (user) {
                         currentUserId = Number(user.id);
-                        userMembershipExpiry = localStorage.getItem('ac_vip_expiry_' + currentUserId) ? Number(localStorage.getItem('ac_vip_expiry_' + currentUserId)) : 0;
-                        
                         if(user.first_name) {
                             document.getElementById('profile-name').innerText = (user.first_name + " " + (user.last_name || "")).trim();
                         }
                         document.getElementById('profile-id').innerText = "ID: " + user.id;
-                        
                         if(user.photo_url) {
                             document.getElementById('profile-avatar-large').src = user.photo_url;
                             document.getElementById('profile-avatar-large').classList.remove('hidden');
                             document.getElementById('profile-icon-large').classList.add('hidden');
                         }
-                        if (Number(user.id) === Number(ADMIN_ID)) {
-                            document.getElementById('nav-admin').classList.remove('hidden');
-                            document.getElementById('header-admin-indicator').classList.remove('hidden');
-                        }
-                    } else {
-                        currentUserId = 123456789;
-                        userMembershipExpiry = localStorage.getItem('ac_vip_expiry_' + currentUserId) ? Number(localStorage.getItem('ac_vip_expiry_' + currentUserId)) : 0;
                     }
-                } catch (err) { console.log("Init sync bound."); }
-                updateGlobalMembershipUI();
+                } catch (err) { console.log("Session error bound."); }
             }
 
-            function isMembershipValid() { return userMembershipExpiry > Date.now(); }
-
-            function updateGlobalMembershipUI() {
-                const hIndicator = document.getElementById('global-membership-status');
-                const pBadge = document.getElementById('profile-badge');
-                
-                if (isMembershipValid()) {
-                    const daysLeft = Math.ceil((userMembershipExpiry - Date.now()) / (1000 * 60 * 60 * 24));
-                    hIndicator.innerText = `💎 ACTIVE (${daysLeft} Days)`;
-                    hIndicator.className = "text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full font-black";
-                    pBadge.innerText = `💎 PLATINUM CLUB MEMBER`;
-                    pBadge.className = "inline-flex items-center gap-1 text-[9px] font-black bg-gradient-to-r from-emerald-500/20 to-teal-500/10 text-emerald-400 px-2.5 py-0.5 rounded-md mt-1.5 border border-emerald-500/30 uppercase tracking-wider shadow-sm";
-                } else {
-                    hIndicator.innerText = "🚫 PASS EXPIRED";
-                    hIndicator.className = "text-[10px] bg-red-500/10 text-red-400 border border-red-500/30 px-2.5 py-1 rounded-full font-bold";
-                    pBadge.innerText = "🚫 ACCESS EXPIRED";
-                    pBadge.className = "inline-flex items-center gap-1 text-[9px] font-black bg-neutral-900 text-neutral-500 px-2.5 py-0.5 rounded-md mt-1.5 border border-neutral-800 uppercase tracking-wider";
-                }
+            // Real-Time database se content lane ka function
+            function fetchLiveStories() {
+                fetch('/api/get_stories')
+                    .then(res => res.json())
+                    .then(data => {
+                        if(data.success) {
+                            storiesData = data.stories;
+                            const splash = document.getElementById('splash-screen');
+                            if(splash) splash.remove();
+                            document.getElementById('main-app').classList.remove('hidden');
+                            
+                            refreshAppDOM();
+                            startAutoBannerCarousel();
+                        }
+                    }).catch(err => alert("Server Sync Error!"));
             }
 
             function startAutoBannerCarousel() {
                 if(sliderTimer) clearInterval(sliderTimer);
                 const sliderItems = storiesData.filter(s => s.category === 'trending').slice(0, 6);
-                if(sliderItems.length === 0) {
-                    document.getElementById('hero-slider').classList.add('hidden');
-                    return;
-                }
+                if(sliderItems.length === 0) return;
+                
                 document.getElementById('hero-slider').classList.remove('hidden');
                 const dotContainer = document.getElementById('slider-dots');
                 dotContainer.innerHTML = '';
@@ -407,7 +304,7 @@ def miniapp():
                     imgEl.src = story.cover;
                     titleEl.innerText = story.title;
                     badgeEl.innerText = story.badge || "🔥 VIP PICK";
-                    subEl.innerText = `Premium Pack • Dedicated Series • ${story.episodes}`;
+                    subEl.innerText = `Premium Pack • ${story.episodes}`;
                     imgEl.style.opacity = '1';
                     const sliderItems = storiesData.filter(s => s.category === 'trending').slice(0, 6);
                     sliderItems.forEach((_, idx) => {
@@ -422,9 +319,6 @@ def miniapp():
 
             function refreshAppDOM() {
                 renderStoreLayout(storiesData);
-                renderUserOrdersLedger();
-                renderAdminRequestsDashboard();
-                renderAdminStoriesManagement();
             }
 
             function renderStoreLayout(data) {
@@ -433,12 +327,7 @@ def miniapp():
                 const grid = document.getElementById('explore-grid');
                 if(!trend || !list || !grid) return;
                 trend.innerHTML = ''; list.innerHTML = ''; grid.innerHTML = '';
-                if(data.length === 0) {
-                    trend.innerHTML = `<div class="text-neutral-600 text-xs py-4 pl-2 font-medium">No trending series launched yet.</div>`;
-                    list.innerHTML = `<div class="text-neutral-600 text-xs py-4 pl-2 font-medium">No updates available.</div>`;
-                    grid.innerHTML = `<div class="text-neutral-600 text-xs py-4 col-span-2 text-center font-medium">No audio packs listed yet.</div>`;
-                    return;
-                }
+                
                 let tIdx = 1;
                 data.forEach(story => {
                     if(story.category === 'trending') {
@@ -446,11 +335,10 @@ def miniapp():
                             <div class="flex items-end relative min-w-[170px] max-w-[170px] h-52 active:scale-95 transition-all duration-200 cursor-pointer pr-3" onclick="openDetails('${story.id}')">
                                 <span class="rank-number absolute -left-4 -bottom-6 z-0 select-none">${tIdx}</span>
                                 <div class="w-28 h-44 ml-auto relative z-10 rounded-2xl overflow-hidden border border-neutral-800/80 shadow-xl">
-                                    <img class="w-full h-full object-cover" src="${story.cover}" onerror="this.src='https://placehold.co/150x200/222/fff?text=Audio'">
+                                    <img class="w-full h-full object-cover" src="${story.cover}">
                                     <div class="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent"></div>
                                     <div class="absolute bottom-2 left-2 right-2 text-left">
                                         <h4 class="text-[10px] font-black text-white truncate drop-shadow">${story.title}</h4>
-                                        <span class="text-[8px] bg-amber-500/20 text-amber-400 font-bold px-1 py-0.2 rounded mt-0.5 inline-block">👑 VIP</span>
                                     </div>
                                 </div>
                             </div>`);
@@ -461,10 +349,6 @@ def miniapp():
                                 <img class="w-full h-36 object-cover rounded-xl shadow border border-neutral-800/40" src="${story.cover}">
                                 <div class="mt-1.5 text-left px-1">
                                     <h4 class="text-[11px] font-extrabold text-neutral-200 truncate leading-tight">${story.title}</h4>
-                                    <div class="flex items-center justify-between mt-1">
-                                        <span class="text-[8px] bg-neutral-900 text-neutral-400 font-bold px-1.5 py-0.5 rounded">${story.tag}</span>
-                                        <span class="text-[9px] text-amber-500 font-bold">VIP</span>
-                                    </div>
                                 </div>
                             </div>`);
                     }
@@ -472,44 +356,9 @@ def miniapp():
                         <div class="bg-neutral-900/30 p-2.5 rounded-2xl border border-neutral-900 flex flex-col justify-between cursor-pointer active:scale-95 transition-all" onclick="openDetails('${story.id}')">
                             <img class="w-full h-40 object-cover rounded-xl mb-2" src="${story.cover}">
                             <h4 class="text-xs font-bold text-white truncate px-0.5">${story.title}</h4>
-                            <div class="flex justify-between items-center mt-1 px-0.5">
-                                <span class="text-[9px] bg-amber-500/10 text-amber-400 font-bold px-1.5 py-0.5 rounded">PREMIUM</span>
-                                <span class="text-[9px] text-neutral-400 font-medium">${story.episodes}</span>
-                            </div>
                         </div>`);
                 });
             }
-
-            function filterByTag(tag) {
-                const btns = document.querySelectorAll('.tag-filter-btn');
-                btns.forEach(btn => {
-                    if(btn.innerText.includes(tag) || (tag === 'All' && btn.innerText.includes('All'))) {
-                        btn.className = "bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-extrabold px-4 py-2 rounded-full whitespace-nowrap tag-filter-btn shadow-md";
-                    } else {
-                        btn.className = "bg-neutral-900/80 text-neutral-400 border border-neutral-800 text-xs font-bold px-4 py-2 rounded-full whitespace-nowrap tag-filter-btn transition-all";
-                    }
-                });
-                if(tag === 'All') renderStoreLayout(storiesData);
-                else renderStoreLayout(storiesData.filter(s => s.tag.toLowerCase() === tag.toLowerCase()));
-            }
-
-            document.getElementById('search-bar').addEventListener('input', (e) => {
-                const val = e.target.value.toLowerCase();
-                const filtered = storiesData.filter(s => s.title.toLowerCase().includes(val));
-                const grid = document.getElementById('explore-grid');
-                grid.innerHTML = '';
-                filtered.forEach(story => {
-                    grid.insertAdjacentHTML('beforeend', `
-                        <div class="bg-neutral-900/30 p-2.5 rounded-xl border border-neutral-900 flex flex-col justify-between cursor-pointer" onclick="openDetails('${story.id}')">
-                            <img class="w-full h-40 object-cover rounded-xl mb-2" src="${story.cover}">
-                            <h4 class="text-xs font-bold text-white truncate">${story.title}</h4>
-                            <div class="flex justify-between items-center mt-1">
-                                <span class="text-[9px] text-amber-500 font-bold">PREMIUM</span>
-                                <span class="text-[9px] text-neutral-400 font-bold">${story.tag}</span>
-                            </div>
-                        </div>`);
-                });
-            });
 
             function openDetails(id) {
                 const story = storiesData.find(s => s.id === id);
@@ -517,225 +366,33 @@ def miniapp():
                 viewStoryId = id;
                 document.getElementById('detail-title').innerText = story.title;
                 document.getElementById('detail-cover').src = story.cover;
-                document.getElementById('detail-badge').innerText = story.badge || '💎 AC VIP STAGE';
+                document.getElementById('detail-badge').innerText = story.badge;
                 document.getElementById('detail-episodes').innerText = story.episodes;
-                document.getElementById('detail-genre').innerText = story.tag;
+                
                 const actionsContainer = document.getElementById('detail-actions-container');
-                if (isMembershipValid()) {
-                    actionsContainer.innerHTML = `
-                        <button onclick="playPremiumStory()" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-black py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center justify-center space-x-2 active:scale-95 transition-all">
-                            <i class="fa-solid fa-circle-play text-sm"></i> <span>Play Full Pack (Premium Direct)</span>
-                        </button>`;
-                } else {
-                    actionsContainer.innerHTML = `
-                        <button onclick="switchTab('plans')" class="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-black py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center justify-center space-x-2 active:scale-95 transition-all premium-glow">
-                            <i class="fa-solid fa-gem text-sm"></i> <span>Unlock Via Premium Pass</span>
-                        </button>
-                        <button onclick="playWithAdsStory()" class="w-full bg-neutral-900 border border-neutral-800 text-neutral-300 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center justify-center space-x-2 active:scale-95 transition-all">
-                            <i class="fa-solid fa-rectangle-ad text-sm text-amber-500"></i> <span>Play with Ads (Free Track)</span>
-                        </button>`;
-                }
+                actionsContainer.innerHTML = `
+                    <button onclick="triggerBotRedirect('${story.id}')" class="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-black py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center justify-center space-x-2 active:scale-95 transition-all premium-glow">
+                        <i class="fa-solid fa-gem text-sm"></i> <span>Get Pack Access in Bot</span>
+                    </button>`;
+                
                 switchTab('none');
                 document.getElementById('page-detail').classList.remove('hidden');
             }
 
-            function playPremiumStory() {
-                const story = storiesData.find(s => s.id === viewStoryId);
-                if(story) triggerStreamingPipeline(story.id);
+            function triggerBotRedirect(itemId) {
+                // Telegram Deep Link API ke zariye direct user ko bot ke interface me bhej dena item parameter ke sath
+                tg.openTelegramLink("https://t.me/" + tg.initDataUnsafe?.bot_inline_placeholder + "?start=" + itemId);
+                tg.close();
             }
 
-            function playWithAdsStory() {
-                const story = storiesData.find(s => s.id === viewStoryId);
-                if(story && story.adLink) triggerStreamingPipeline(story.adLink);
-                else alert("Ad Track resource link is missing for this pack!");
-            }
-
-            function triggerStreamingPipeline(targetContentKey) {
-                let fileReference = targetContentKey.trim();
-                if (fileReference.startsWith('http://') || fileReference.startsWith('https://')) {
-                    if (fileReference.includes('t.me')) { tg.openTelegramLink(fileReference); } 
-                    else { try { tg.openLink(fileReference, { try_instant_view: false }); } catch(e) { window.open(fileReference, '_blank'); } }
-                } else {
-                    tg.switchInlineQuery("get_file_" + fileReference);
-                }
-            }
-
-            function openPaymentGateway(planName, amount, days) {
-                currentTargetPlan = { planName, amount, days };
-                document.getElementById('modal-plan-title').innerText = planName;
-                document.getElementById('modal-pay-price').innerText = "₹" + amount;
-                document.getElementById('payment-utr-input').value = '';
-                document.getElementById('payment-modal').classList.remove('hidden');
-            }
-
-            function triggerUPIDeepLink() {
-                if(!currentTargetPlan) return;
-                const upiUrl = `upi://pay?pa=${STORE_UPI_ID}&pn=AC%20Premium&am=${currentTargetPlan.amount}&cu=INR&tn=Activate%20VIP%20Access%20Pass`;
-                try { tg.openLink(upiUrl); } catch (e) {
-                    const a = document.createElement('a'); a.href = upiUrl; a.target = '_blank';
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                }
-            }
-
-            document.getElementById('submit-utr-btn').addEventListener('click', () => {
-                const utrVal = document.getElementById('payment-utr-input').value.trim();
-                if(utrVal.length < 10) { alert("Please input authentic 12-digit UPI tracking code!"); return; }
-                if(!currentTargetPlan) return;
-                const user = tg.initDataUnsafe?.user || { id: 123456789, first_name: "Guest Client" };
-                const requestPayload = {
-                    reqId: "REQ-" + Math.floor(100000 + Math.random() * 900000),
-                    userId: Number(user.id),
-                    username: user.first_name,
-                    utr: utrVal,
-                    planName: currentTargetPlan.planName,
-                    days: currentTargetPlan.days,
-                    price: currentTargetPlan.amount,
-                    status: "Pending Settle"
-                };
-                membershipRequests.push(requestPayload);
-                localStorage.setItem('ac_vip_m_requests', JSON.stringify(membershipRequests));
-                document.getElementById('payment-modal').classList.add('hidden');
-                alert("UTR submitted to cloud server tracking workspace! Check status inside VIP Pass section.");
-                refreshAppDOM();
-            });
-
-            function renderUserOrdersLedger() {
-                const container = document.getElementById('orders-list-container');
-                if(!container) return; container.innerHTML = '';
-                const currentUser = tg.initDataUnsafe?.user || { id: 123456789 };
-                const myLogs = membershipRequests.filter(r => Number(r.userId) === Number(currentUser.id) || Number(currentUser.id) === 123456789);
-                if(myLogs.length === 0) {
-                    container.innerHTML = `<div class="bg-neutral-900/20 text-neutral-600 border border-neutral-900 p-6 rounded-xl text-center font-bold text-[11px]">No active transaction history located.</div>`;
-                    return;
-                }
-                myLogs.forEach(l => {
-                    const isLive = l.status === 'Approved Live';
-                    container.insertAdjacentHTML('beforeend', `
-                        <div class="bg-neutral-900/40 p-4 border border-neutral-900 rounded-xl flex justify-between items-center text-xs">
-                            <div>
-                                <h5 class="font-extrabold text-white">${l.planName} (₹${l.price})</h5>
-                                <p class="text-[10px] text-neutral-500 font-mono mt-0.5">UTR Code: ${l.utr}</p>
-                            </div>
-                            <div>${isLive ? `<span class="bg-emerald-500/10 text-emerald-400 font-black border border-emerald-500/20 px-3 py-1.5 rounded-xl text-[9px] uppercase tracking-wide">ACTIVE</span>` : `<span class="bg-amber-500/10 text-amber-400 font-black border border-amber-500/20 px-3 py-1.5 rounded-xl text-[9px] uppercase tracking-wide animate-pulse">PENDING</span>`}</div>
-                        </div>`);
-                });
-            }
-
-            function renderAdminRequestsDashboard() {
-                const container = document.getElementById('admin-requests-container');
-                if(!container) return; container.innerHTML = '';
-                const pending = membershipRequests.filter(r => r.status === 'Pending Settle');
-                if(pending.length === 0) {
-                    container.innerHTML = `<p class="text-[11px] text-neutral-600 text-center font-medium py-1">No pending validations currently waiting inside vault ledger.</p>`;
-                    return;
-                }
-                pending.forEach(r => {
-                    container.insertAdjacentHTML('beforeend', `
-                        <div class="bg-neutral-950 p-4 rounded-xl border border-neutral-900 space-y-2.5">
-                            <div class="flex justify-between text-[11px]">
-                                <span class="text-white font-extrabold">${r.planName} (₹${r.price})</span>
-                                <span class="text-amber-400 font-mono font-bold select-all bg-neutral-900 px-2 rounded">${r.utr}</span>
-                            </div>
-                            <p class="text-[10px] text-neutral-500">Client Info: ${r.username} (ID: ${r.userId}) • Days: ${r.days}</p>
-                            <div class="grid grid-cols-2 gap-2 pt-0.5">
-                                <button onclick="executeAdminAction('${r.utr}', 'approve')" class="bg-emerald-600 text-white font-extrabold py-2 rounded-lg text-[10px] shadow active:scale-95 transition-all">Grant Activation</button>
-                                <button onclick="executeAdminAction('${r.utr}', 'reject')" class="bg-red-950/60 text-red-400 border border-red-900/30 py-2 rounded-lg text-[10px] active:scale-95 transition-all">Drop Request</button>
-                            </div>
-                        </div>`);
-                });
-            }
-
-            function executeAdminAction(utr, action) {
-                const idx = membershipRequests.findIndex(r => r.utr === utr);
-                if(idx === -1) return;
-                const targetUserId = membershipRequests[idx].userId;
-                if(action === 'approve') {
-                    membershipRequests[idx].status = 'Approved Live';
-                    const daysMs = membershipRequests[idx].days * 24 * 60 * 60 * 1000;
-                    let existingExpiry = localStorage.getItem('ac_vip_expiry_' + targetUserId) ? Number(localStorage.getItem('ac_vip_expiry_' + targetUserId)) : 0;
-                    let baseStart = Date.now();
-                    if(existingExpiry > Date.now()) baseStart = existingExpiry; 
-                    let computedExpiry = baseStart + daysMs;
-                    localStorage.setItem('ac_vip_expiry_' + targetUserId, computedExpiry.toString());
-                    if(Number(targetUserId) === Number(currentUserId)) { userMembershipExpiry = computedExpiry; }
-                    alert(`Membership approved for User ID: ${targetUserId} successfully!`);
-                } else {
-                    membershipRequests.splice(idx, 1);
-                    alert("Validation log dropped cleanly.");
-                }
-                localStorage.setItem('ac_vip_m_requests', JSON.stringify(membershipRequests));
-                updateGlobalMembershipUI(); refreshAppDOM();
-            }
-
-            function renderAdminStoriesManagement() {
-                const container = document.getElementById('admin-stories-delete-container');
-                if(!container) return; container.innerHTML = '';
-                if(storiesData.length === 0) {
-                    container.innerHTML = `<p class="text-[11px] text-neutral-600 text-center font-medium py-1">No active stories available in database.</p>`;
-                    return;
-                }
-                storiesData.forEach(story => {
-                    container.insertAdjacentHTML('beforeend', `
-                        <div class="bg-neutral-950 p-3 rounded-xl border border-neutral-900 flex justify-between items-center">
-                            <div class="flex items-center space-x-3 truncate">
-                                <img src="${story.cover}" class="w-8 h-8 object-cover rounded-md border border-neutral-800" onerror="this.src='https://placehold.co/50'">
-                                <div class="truncate">
-                                    <h5 class="text-white font-bold truncate">${story.title}</h5>
-                                    <p class="text-[10px] text-neutral-500">${story.tag} • ${story.episodes}</p>
-                                </div>
-                            </div>
-                            <button onclick="deleteStory('${story.id}')" class="bg-red-950/80 text-red-400 border border-red-900/40 px-3 py-1.5 rounded-lg text-[10px] font-bold active:scale-95 transition-all"><i class="fa-solid fa-trash-can"></i> Delete</button>
-                        </div>`);
-                });
-            }
-
-            function deleteStory(id) {
-                if(confirm("Kya aap sach me is story ko permanent delete karna chahte hain?")) {
-                    storiesData = storiesData.filter(s => s.id !== id);
-                    localStorage.setItem('ac_vip_db', JSON.stringify(storiesData));
-                    alert("Story database se permanent delete ho gayi hai!");
-                    refreshAppDOM(); startAutoBannerCarousel();
-                }
-            }
-
-            function revokeUserPremium() {
-                const userIdInput = document.getElementById('form-revoke-userid').value.trim();
-                if(!userIdInput) { alert("Please enter a valid Telegram User ID!"); return; }
-                const targetUserId = Number(userIdInput);
-                if(confirm(`Kya aap sach me User ID: ${targetUserId} ka Premium Access permanent hatana chahte hain?`)) {
-                    localStorage.removeItem('ac_vip_expiry_' + targetUserId);
-                    membershipRequests = membershipRequests.map(r => {
-                        if(Number(r.userId) === targetUserId && r.status === 'Approved Live') { r.status = 'Revoked / Expired'; }
-                        return r;
-                    });
-                    localStorage.setItem('ac_vip_m_requests', JSON.stringify(membershipRequests));
-                    if(Number(targetUserId) === Number(currentUserId)) { userMembershipExpiry = 0; updateGlobalMembershipUI(); }
-                    alert(`User ID: ${targetUserId} ka Premium status database se revoke (hata) diya gaya hai!`);
-                    document.getElementById('form-revoke-userid').value = '';
-                    refreshAppDOM();
-                }
-            }
-
-            function saveNewStory() {
-                const title = document.getElementById('form-title').value.trim();
-                const cover = document.getElementById('form-cover').value.trim();
-                const adLink = document.getElementById('form-adlink').value.trim();
-                const id = document.getElementById('form-id').value.trim();
-                const episodes = document.getElementById('form-episodes').value.trim() || "Full Series Pack";
-                const tag = document.getElementById('form-tag').value;
-                const category = document.getElementById('form-category').value;
-                const badge = document.getElementById('form-badge').value.trim() || "🔥 VIP AUDIO";
-                if(!title || !cover || !id || !adLink) { alert("Please input mandatory parameters fields including Custom Ad Link URL!"); return; }
-                const targetObj = { id, title, category, rating: "4.9", episodes, tag, badge, cover, adLink };
-                storiesData.push(targetObj); localStorage.setItem('ac_vip_db', JSON.stringify(storiesData));
-                document.getElementById('form-title').value = ''; document.getElementById('form-cover').value = '';
-                document.getElementById('form-adlink').value = ''; document.getElementById('form-id').value = '';
-                document.getElementById('form-episodes').value = ''; document.getElementById('form-badge').value = '';
-                refreshAppDOM(); startAutoBannerCarousel(); switchTab('home'); alert("New Story with Linked Ad Track Code Added Successfully!");
+            function redirectToBotPayment(planId) {
+                // Pass selection ko direct bot ke andar start command me catch karne ke liye redirect link
+                tg.openTelegramLink("https://t.me/your_bot_username?start=plan_" + planId);
+                tg.close();
             }
 
             function switchTab(tab) {
-                const items = ["home", "explore", "plans", "profile", "admin"];
+                const items = ["home", "explore", "plans", "profile"];
                 items.forEach(i => {
                     const p = document.getElementById(`page-${i}`); const n = document.getElementById(`nav-${i}`);
                     if(p) p.classList.add('hidden');
