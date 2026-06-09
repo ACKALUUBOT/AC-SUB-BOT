@@ -1,11 +1,10 @@
 import uuid
+from datetime import datetime
 from telebot import types
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove, WebAppInfo # <-- WebAppInfo import kiya
+import config
 from utils import bot, get_time_string
 from database import channels_col, users_col
-from datetime import datetime
-import config
-
 from plugins.store import get_categories_markup, get_items_by_category_markup, get_store_text
 from main import USER_STATES
 
@@ -57,7 +56,7 @@ def start_handler(message):
                 markup.add(InlineKeyboardButton(f"💳 🎧 ᴜɴʟᴏᴄᴋ sᴛᴏʀʏ - ₹{data.get('price', '49')}", callback_data=f"select_{db_id}_manual"))
                 display_name = data.get('story_name')
                 header = f"🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ ({data.get('source', 'audio')})</b>"
-                desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code><b>ɪɴsᴛᴀɴᴛ ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</b></code>\nℹ️ <i>Isme payment ke baad direct external link ya redirection button milega.</i>"
+                desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code><b>ɪsᴛᴀɴᴛ ʙᴏᴛ ʟɪɴᴋ ᴀᴄᴄᴇss</b></code>\nℹ️ <i>Isme payment ke baad direct external link ya redirection button milega.</i>"
 
             if data.get('demo_link'):
                 markup.add(InlineKeyboardButton("📺 ᴠɪᴇᴡ ǫᴜᴀʟɪᴛʏ ᴅᴇᴍᴏ (ᴛᴇᴀsᴇʀ)", url=data['demo_link']))
@@ -73,6 +72,11 @@ def start_handler(message):
 
     # ─── 2. MAIN DASHBOARD (ADMIN VS USER SPLIT) ───
     markup = InlineKeyboardMarkup(row_width=2)
+    
+    # 🌟 MINI APP BUTTON (Apna Mini app URL config.py me set karein ya direct string pass karein)
+    miniapp_url = getattr(config, 'MINIAPP_URL', 'https://your-miniapp-url.com')
+    markup.add(InlineKeyboardButton("🚀 ᴏᴘᴇɴ ᴍɪɴɪ ᴀᴘᴘ 🚀", web_app=WebAppInfo(url=miniapp_url)))
+    
     markup.add(InlineKeyboardButton("🛍️ ᴏᴘᴇɴ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀᴇ 🛍️", callback_data="open_store"))
     
     markup.add(
