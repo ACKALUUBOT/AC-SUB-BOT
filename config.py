@@ -11,4 +11,4 @@ RZP_KEY_ID = os.getenv('RZP_KEY_ID', '')
 RZP_KEY_SECRET = os.getenv('RZP_KEY_SECRET', '')
 RZP_WEBHOOK_SECRET = os.getenv('RZP_WEBHOOK_SECRET', '')
 
-BASE_URL = os.getenv('BASE_URL', 'https://your-domain.onrender.com')
+BASE_URL = os.getenv('BASE_URL', 'https://ac-sub-bot.onrender.com')
