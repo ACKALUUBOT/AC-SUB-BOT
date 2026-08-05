@@ -11,4 +11,7 @@ RZP_KEY_ID = os.getenv('RZP_KEY_ID', '')
 RZP_KEY_SECRET = os.getenv('RZP_KEY_SECRET', '')
 RZP_WEBHOOK_SECRET = os.getenv('RZP_WEBHOOK_SECRET', '')
 
-BASE_URL = os.getenv('BASE_URL', 'https://ac-sub-bot.onrender.com')
+BASE_URL = os.getenv('BASE_URL', 'https://ac-sub-bot-tqsd.onrender.com')
+
+# Circular Import से बचने के लिए Global USER_STATES
+USER_STATES = {}
