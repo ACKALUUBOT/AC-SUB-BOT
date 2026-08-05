@@ -1,12 +1,14 @@
 import uuid
 from datetime import datetime
 from telebot import types
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove, WebAppInfo # <-- WebAppInfo import kiya
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove, WebAppInfo
 import config
 from utils import bot, get_time_string
 from database import channels_col, users_col
 from plugins.store import get_categories_markup, get_items_by_category_markup, get_store_text
-from main import USER_STATES
+
+# Circular Import से बचने के लिए USER_STATES को config से लाएं (या यहाँ डिफाइन करें)
+USER_STATES = getattr(config, 'USER_STATES', {})
 
 @bot.message_handler(commands=['start'])
 def start_handler(message):
@@ -73,7 +75,7 @@ def start_handler(message):
     # ─── 2. MAIN DASHBOARD (ADMIN VS USER SPLIT) ───
     markup = InlineKeyboardMarkup(row_width=2)
     
-    # 🌟 MINI APP BUTTON (Apna Mini app URL config.py me set karein ya direct string pass karein)
+    # MINI APP BUTTON
     miniapp_url = getattr(config, 'MINIAPP_URL', 'https://your-miniapp-url.com')
     markup.add(InlineKeyboardButton("🚀 ᴏᴘᴇɴ ᴍɪɴɪ ᴀᴘᴘ 🚀", web_app=WebAppInfo(url=miniapp_url)))
     
@@ -105,7 +107,7 @@ def start_handler(message):
     bot.send_message(chat_id, f"{title}\n\n{desc}", reply_markup=markup, parse_mode="HTML")
 
 
-# ─── 3. TEXT NAVIGATION HANDLERS (FIXED & REAL-TIME) ───
+# ─── 3. TEXT NAVIGATION HANDLERS ───
 @bot.message_handler(func=lambda msg: msg.text in [
     "✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs", 
     "🔥 ᴘᴏᴄᴋᴇᴛ ғᴍ sᴛᴏʀɪᴇs", 
@@ -122,7 +124,7 @@ def store_navigation_text_handler(message):
     if text == "🚫 STORE IS EMPTY":
         return bot.send_message(message.chat.id, "<blockquote>⚠️ ❌ NO STORY AVAILABLE RIGHT NOW.</blockquote>", parse_mode="HTML")
 
-    if text == "❌ CLOSE STORE" or text == "« BACK TO MENU":
+    if text in ["❌ CLOSE STORE", "« BACK TO MENU"]:
         USER_STATES[user_id] = {"category": "home", "page": 1}
         bot.send_message(message.chat.id, "⬅️ <i>Returning to Dashboard Panel...</i>", reply_markup=ReplyKeyboardRemove())
         return start_handler(message)
@@ -131,7 +133,6 @@ def store_navigation_text_handler(message):
         USER_STATES[user_id] = {"category": "home", "page": 1}
         return bot.send_message(message.chat.id, get_store_text(), reply_markup=get_categories_markup(), parse_mode="HTML")
 
-    # Dynamic Routing strictly matching with database and store file layout
     if text == "✨ ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs":
         USER_STATES[user_id] = {"category": "pratilipi", "page": 1}
         cat_title, c_type = "🎬 <b>ᴘʀᴀᴛɪʟɪᴘɪ ғᴍ sᴛᴏʀɪᴇs</b>", "pratilipi"
@@ -142,7 +143,6 @@ def store_navigation_text_handler(message):
         USER_STATES[user_id] = {"category": "combo", "page": 1}
         cat_title, c_type = "🎁 <b>✨ ᴘʀᴇᴍɪᴜᴍ ᴄᴏᴍʙᴏ ᴘᴀᴄᴋs ✨</b>", "combo"
 
-    # Real-time database items rendering
     markup = get_items_by_category_markup(c_type, bot.get_me().username, page=1)
     bot.send_message(
         message.chat.id, 
@@ -172,13 +172,12 @@ def store_pagination_handler(message):
     )
 
 
-# ─── 5. STORY CLICK ROUTER (3 SEPARATE STRICT FLOWS MATCHING INDEX LOGIC) ───
+# ─── 5. STORY CLICK ROUTER ───
 @bot.message_handler(func=lambda msg: any(char in msg.text for char in ['[ ₹', '➔ [']))
 def item_selection_handler(message):
     input_text = message.text
     clean_name = input_text
     
-    # Strictly handle serial numbers like "1. Story Name [ ₹49 ]"
     if "." in input_text:
         try:
             clean_name = input_text.split(".", 1)[1].split("[")[0].strip()
@@ -205,14 +204,14 @@ def item_selection_handler(message):
     inline_markup = InlineKeyboardMarkup(row_width=1)
     db_id = data.get('item_id') or data.get('channel_id')
 
-    # ─── 🎁 FLOW 1: COMBO PACK ───
+    # Flow 1: Combo Pack
     if data.get('is_combo'):
         inline_markup.add(InlineKeyboardButton(f"✅ CONFIRM & PAY COMBO - ₹{data['price']}", callback_data=f"select_{db_id}_manual"))
         header = "🎁 <b>ᴘʀᴇᴍɪᴜᴍ sᴘᴇᴄɪᴀʟ ᴄᴏᴍʙᴏ ʙᴜɴᴅʟᴇ</b>"
         item_label = data.get('combo_name')
         desc_text = f"📝 <b>ɪɴᴄʟᴜᴅᴇᴅ sᴛᴏʀɪᴇs:</b>\n<i>{data.get('description', 'Multiple bundles inside!')}</i>"
         
-    # ─── 📢 FLOW 2: FORWARDED CHANNEL (/add Flow) ───
+    # Flow 2: Forwarded Channel (/add Flow)
     elif 'channel_id' in data and not data.get('story_name'):
         if data.get('plans') and isinstance(data['plans'], dict):
             for p_time, p_price in data['plans'].items():
@@ -224,7 +223,7 @@ def item_selection_handler(message):
         item_label = data.get('name', 'VIP Channel')
         desc_text = "🤖 <b>ᴅᴇʟɪᴠᴇʀʏ:</b> <code>ᴄʜᴀɴɴᴇʟ ɪɴᴠɪᴛᴇ ʟɪɴᴋ (𝟷-ᴛɪᴍᴇ ᴜsᴇ)</code>\nℹ️ <i>Is pack me aapko private channel join karne ka temporary link milega.</i>"
 
-    # ─── 🔥 FLOW 3: MANUAL STORY (/add_story Flow) ───
+    # Flow 3: Manual Story (/add_story Flow)
     else:
         inline_markup.add(InlineKeyboardButton(f"💳 UNLOCK PREMIUM STORY - ₹{data.get('price', '49')}", callback_data=f"select_{db_id}_manual"))
         header = f"🔥 <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀʏ ({data.get('source', 'audio')})</b>"
@@ -302,7 +301,7 @@ def my_plan_callback(call):
         except: pass
 
         if not subs:
-            return bot.send_message(u_id, "❌ <b><b>ɴᴏ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ</b></b>\n\nAapka filhal koi active plan nahi chal raha hai.", reply_markup=back_markup, parse_mode="HTML")
+            return bot.send_message(u_id, "❌ <b>NO ACTIVE PLAN</b>\n\nAapka filhal koi active plan nahi chal raha hai.", reply_markup=back_markup, parse_mode="HTML")
 
         res = "👤 <b>ᴍʏ ᴘᴇʀsᴏɴᴀʟ ᴅᴀsʜʙᴏᴀʀᴅ</b>\n──────────────────────────\n\n"
         for s in subs:
