@@ -5,15 +5,16 @@ from utils import bot
 from server import app
 from scheduler import start_scheduler
 
-# ─── 🌟 GLOBAL STATE TRACKER (CROSS-PLUGIN SYNC) ───
-# Isko yahan rakhne se plugins.start aur plugins.payment dono ise bina crash ke use kar payenge
-USER_STATES = {}  # Format: {user_id: {"category": "story", "page": 1}}
-
 # Plugins folder ke handlers register karne ke liye explicitly import karein
 import plugins.start
+import plugins.story
 import plugins.admin
 import plugins.payment
 import plugins.broadcast
+try:
+    import plugins.callback_handlers
+except Exception as e:
+    print(f"Callback handlers import warning: {e}")
 
 if __name__ == '__main__':
     try:
@@ -29,8 +30,13 @@ if __name__ == '__main__':
     # 2. Start Background Scheduler for Expiries
     start_scheduler()
     
-    # 3. Start Telegram Bot Polling (With Allowed Updates for Anti-Rejoin)
+    # 3. Start Telegram Bot Polling (With Anti-Conflict Protection)
     print("Bot setup separated successfully! Starting polling...")
     
-    # FIX: Yahan allowed_updates daal diya hai taaki chat_member_handler sahi se trigger ho sake
-    bot.infinity_polling(allowed_updates=["message", "callback_query", "chat_member"])
+    # skip_pending=True se purani bachi hui updates clear ho jayengi aur 409 Conflict nahi aayega
+    bot.infinity_polling(
+        allowed_updates=["message", "callback_query", "chat_member"],
+        skip_pending=True,
+        timeout=20,
+        long_polling_timeout=10
+    )
