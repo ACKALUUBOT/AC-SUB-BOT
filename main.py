@@ -9,6 +9,7 @@ from scheduler import start_scheduler
 import plugins.start
 import plugins.story
 import plugins.admin
+import plugins.custom_combo
 import plugins.payment
 import plugins.broadcast
 try:
