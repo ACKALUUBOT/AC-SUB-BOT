@@ -7,7 +7,7 @@ from utils import bot, get_time_string
 from database import channels_col, users_col
 from plugins.store import get_categories_markup, get_items_by_category_markup, get_store_text
 
-# Circular Import से बचने के लिए USER_STATES को config से लाएं (या यहाँ डिफाइन करें)
+# Circular Import से बचने के लिए USER_STATES को config से लाएं
 USER_STATES = getattr(config, 'USER_STATES', {})
 
 @bot.message_handler(commands=['start'])
@@ -79,7 +79,11 @@ def start_handler(message):
     miniapp_url = getattr(config, 'MINIAPP_URL', 'https://your-miniapp-url.com')
     markup.add(InlineKeyboardButton("🚀 ᴏᴘᴇɴ ᴍɪɴɪ ᴀᴘᴘ 🚀", web_app=WebAppInfo(url=miniapp_url)))
     
-    markup.add(InlineKeyboardButton("🛍️ ᴏᴘᴇɴ ᴇxᴄʟᴜsɪᴠᴇ sᴛᴏʀᴇ 🛍️", callback_data="open_store"))
+    # STORE & CUSTOM COMBO BUTTONS
+    markup.add(
+        InlineKeyboardButton("🛍️ ᴏᴘᴇɴ sᴛᴏʀᴇ", callback_data="open_store"),
+        InlineKeyboardButton("🎁 ᴍᴀᴋᴇ ᴄᴜsᴛᴏᴍ ᴄᴏᴍʙᴏ", callback_data="create_combo")
+    )
     
     markup.add(
         InlineKeyboardButton("👤 ᴍʏ ᴅᴀsʜʙᴏᴀʀᴅ", callback_data="my_plan"),
