@@ -33,7 +33,7 @@ def handle_admin_menu_buttons(call):
         remove_user_start(call.message)
 
 
-RESOLVED) ───
+# ─── 2. BACK TO START HANDLER (CIRCULAR IMPORT RESOLVED) ───
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_start")
 def back_to_start_handler(call):
     bot.answer_callback_query(call.id)
